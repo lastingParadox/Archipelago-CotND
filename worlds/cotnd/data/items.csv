@@ -1,0 +1,182 @@
+Display Name,Item Classification,Type,Necrodancer ID,DLC,Default
+Cadence,Progression,Character,Cadence,Base,True
+Melody,Progression,Character,Melody,Base,False
+Aria,Progression,Character,Aria,Base,False
+Dorian,Progression,Character,Dorian,Base,False
+Eli,Progression,Character,Eli,Base,False
+Monk,Progression,Character,Monk,Base,False
+Dove,Progression,Character,Dove,Base,False
+Coda,Progression,Character,Coda,Base,False
+Bolt,Progression,Character,Bolt,Base,False
+Bard,Progression,Character,Bard,Base,True
+Nocturna,Progression,Character,Nocturna,Amplified,True
+Diamond,Progression,Character,Diamond,Amplified,False
+Mary,Progression,Character,Mary,Amplified,True
+Tempo,Progression,Character,Tempo,Amplified,True
+Reaper,Progression,Character,Reaper,Base,True
+Klarinetta,Progression,Character,Klarinetta,Synchrony,True
+Chaunter,Progression,Character,Chaunter,Synchrony,True
+Suzu,Progression,Character,Suzu,Synchrony,True
+Leather Armor,Useful,Armor,ArmorLeather,Base,True
+Chainmail,Useful,Armor,ArmorChainmail,Base,False
+Plate Armor,Useful,Armor,ArmorPlatemail,Base,False
+Heavy Plate,Useful,Armor,ArmorHeavyplate,Base,False
+Obsidian Armor,Useful,Armor,ArmorObsidian,Base,False
+Glass Armor,Useful,Armor,ArmorGlass,Base,False
+Heavy Glass Armor,Useful,Armor,ArmorHeavyglass,Amplified,False
+Quartz Armor,Useful,Armor,ArmorQuartz,Amplified,False
+Karate Gi,Useful,Armor,ArmorGi,Base,False
+Miner's Cap,Useful,Head,HeadMinersCap,Base,True
+Monocle,Useful,Head,HeadMonocle,Base,True
+Circlet of Telepathy,Useful,Head,HeadCircletTelepathy,Base,True
+Helm,Useful,Head,HeadHelm,Base,False
+Crown of Thorns,Useful,Head,HeadCrownOfThorns,Base,False
+Crown of Teleportation,Useful,Head,HeadCrownOfTeleportation,Base,True
+Glass Jaw,Useful,Head,HeadGlassJaw,Base,False
+Blast Helm,Useful,Head,HeadBlastHelm,Base,False
+Sunglasses,Useful,Head,HeadSunglasses,Base,False
+Spiked Ears,Useful,Head,HeadSpikedEars,Amplified,False
+Ballet Shoes,Useful,Feet,FeetBalletShoes,Base,True
+Winged Boots,Useful,Feet,FeetBootsWinged,Base,True
+Explorers Boots,Useful,Feet,FeetBootsExplorers,Base,True
+Lead Boots,Useful,Feet,FeetBootsLead,Base,True
+Glass Slippers,Useful,Feet,FeetGlassSlippers,Amplified,True
+Hargreaves,Useful,Feet,FeetGreaves,Base,False
+Boots of Strength,Useful,Feet,FeetBootsStrength,Base,True
+Boots of Pain,Useful,Feet,FeetBootsPain,Base,False
+Boots of Leaping,Useful,Feet,FeetBootsLeaping,Base,True
+Boots of Lunging,Useful,Feet,FeetBootsLunging,Base,True
+Torch,Useful,Torch,Torch1,Base,True
+Bright Torch,Useful,Torch,Torch2,Base,False
+Luminous Torch,Useful,Torch,Torch3,Base,False
+Obsidian Torch,Useful,Torch,TorchObsidian,Base,False
+Glass Torch,Useful,Torch,TorchGlass,Base,False
+Infernal Torch,Useful,Torch,TorchInfernal,Base,False
+Torch of Foresight,Useful,Torch,TorchForesight,Base,False
+Torch of Walls,Useful,Torch,TorchWalls,Amplified,False
+Torch of Strength,Useful,Torch,TorchStrength,Amplified,False
+Titanium Shovel,Useful,Shovel,ShovelTitanium,Base,True
+Crystal Shovel,Useful,Shovel,ShovelCrystal,Base,True
+Obsidian Shovel,Useful,Shovel,ShovelObsidian,Base,False
+Glass Shovel,Useful,Shovel,ShovelGlass,Base,False
+Blood Shovel,Useful,Shovel,ShovelBlood,Base,False
+Pickaxe,Useful,Shovel,Pickaxe,Base,False
+Shovel of Courage,Useful,Shovel,ShovelCourage,Amplified,False
+Shovel of Strength,Useful,Shovel,ShovelStrength,Amplified,False
+Battle Shovel,Useful,Shovel,ShovelBattle,Amplified,False
+Ring of Charisma,Useful,Ring,RingCharisma,Base,True
+Ring of Gold,Useful,Ring,RingGold,Base,False
+Ring of Luck,Useful,Ring,RingLuck,Base,False
+Ring of Mana,Useful,Ring,RingMana,Base,False
+Ring of Might,Useful,Ring,RingMight,Base,False
+Ring of Protection,Useful,Ring,RingProtection,Base,False
+Ring of Regeneration,Useful,Ring,RingRegeneration,Base,False
+Ring of Shielding,Useful,Ring,RingShielfing,Base,False
+Ring of War,Useful,Ring,RingWar,Base,False
+Ring of Courage,Useful,Ring,RingCourage,Base,False
+Ring of Peace,Useful,Ring,RingPeace,Base,False
+Ring of Shadows,Useful,Ring,RingShadows,Base,False
+Ring of Becoming,Useful,Ring,RingBecoming,Base,True
+Ring of Phasing,Useful,Ring,RingPhasing,Base,True
+Ring of Frost,Useful,Ring,RingFrost,Amplified,False
+Ring of Piercing,Useful,Ring,RingPiercing,Amplified,False
+Ring of Pain,Useful,Ring,RingPain,Amplified,False
+Jeweled Dagger,Useful,Weapon,WeaponDaggerJeweled,Base,True
+Electric Dagger,Useful,Weapon,WeaponDaggerElectric,Amplified,True
+Phasing Dagger,Useful,Weapon,WeaponDaggerPhasing,Base,True
+Frost Dagger,Useful,Weapon,WeaponDaggerFrost,Base,True
+Broadsword,Useful,Weapon,WeaponBroadsword,Base,True
+Longsword,Useful,Weapon,WeaponLongsword,Base,False
+Spear,Useful,Weapon,WeaponSpear,Base,False
+Trident,Useful,Weapon,WeaponTrident,Synchrony,False
+Bow,Useful,Weapon,WeaponBow,Base,True
+Staff,Useful,Weapon,WeaponStaff,Amplified,False
+Whip,Useful,Weapon,WeaponWhip,Base,False
+Harp,Useful,Weapon,WeaponHarp,Amplified,False
+Warhammer,Useful,Weapon,WeaponWarhammer,Amplified,False
+Cutlass,Useful,Weapon,WeaponCutlass,Amplified,True
+Rapier,Useful,Weapon,WeaponRapier,Base,False
+Cat o' Nine Tails,Useful,Weapon,WeaponCat,Base,False
+Axe,Useful,Weapon,WeaponAxe,Amplified,False
+Crossbow,Useful,Weapon,WeaponCrossbow,Base,True
+Blunderbuss,Useful,Weapon,WeaponBlunderbuss,Base,True
+Rifle,Useful,Weapon,WeaponRifle,Base,False
+Wooden Shield,Useful,Shield,Sync_ShieldWooden,Synchrony,True
+Titanium Shield,Useful,Shield,Sync_ShieldTitanium,Synchrony,False
+Heavy Shield,Useful,Shield,Sync_ShieldHeavy,Synchrony,False
+Obsidian Shield,Useful,Shield,Sync_ShieldObsidian,Synchrony,False
+Shield of Strength,Useful,Shield,Sync_ShieldStrength,Synchrony,True
+Reflective Shield,Useful,Shield,Sync_ShieldReflective,Synchrony,False
+Shield of Shove,Useful,Shield,Sync_ShieldWooden,Synchrony,True
+Fireball Spell,Useful,Spell,SpellFireball,Base,True
+Freeze Spell,Useful,Spell,SpellFreezeEnemies,Base,False
+Heal Spell,Useful,Spell,SpellHeal,Base,False
+Bomb Spell,Useful,Spell,SpellBomb,Base,False
+Shield Spell,Useful,Spell,SpellShield,Base,False
+Transmute Spell,Useful,Spell,SpellTransmute,Base,False
+Earth Spell,Useful,Spell,SpellEarth,Amplified,False
+Pulse Spell,Useful,Spell,SpellPulse,Amplified,False
+Berserk Spell,Useful,Spell,Sync_SpellBerzerk,Synchrony,True
+Dash Spell,Useful,Spell,Sync_SpellDash,Synchrony,True
+Charm Spell,Useful,Spell,Sync_SpellCharm,Synchrony,True
+Fireball Scroll,Useful,Scroll,ScrollFireball,Base,True
+Freeze Scroll,Useful,Scroll,ScrollFreezeEnemies,Base,True
+Shield Scroll,Useful,Scroll,ScrollShield,Base,False
+Transmute Scroll,Useful,Scroll,ScrollTransmute,Base,False
+Pulse Scroll,Useful,Scroll,ScrollPulse,Amplified,True
+Berserk Scroll,Useful,Scroll,Sync_ScrollBerzerk,Synchrony,True
+Earthquake Scroll,Useful,Scroll,ScrollEarthquake,Base,False
+Enchant Weapon Scroll,Useful,Scroll,ScrollEnchantWeapon,Base,False
+Fear Scroll,Useful,Scroll,ScrollFear,Base,False
+Scroll of Need,Useful,Scroll,ScrollNeed,Base,False
+Riches Scroll,Useful,Scroll,ScrollRiches,Base,False
+Fireball Tome,Useful,Tome,TomeFireball,Amplified,False
+Freeze Tome,Useful,Tome,TomeFreeze,Amplified,False
+Shield Tome,Useful,Tome,TomeShield,Amplified,False
+Transmute Tome,Useful,Tome,TomeTransmute,Amplified,False
+Pulse Tome,Useful,Tome,TomePulse,Amplified,False
+Earth Tome,Useful,Tome,TomeEarth,Amplified,False
+Apple,Useful,Food,Food1,Base,True
+Magic Apple,Useful,Food,FoodMagic1,Base,True
+Cheese,Useful,Food,Food2,Base,False
+Magic Cheese,Useful,Food,FoodMagic2,Base,False
+Drumstick,Useful,Food,Food3,Base,False
+Magic Drumstick,Useful,Food,FoodMagic3,Base,False
+Ham,Useful,Food,Food4,Base,False
+Magic Ham,Useful,Food,FoodMagic4,Base,False
+Carrot,Useful,Food,FoodCarrot,Amplified,False
+Magic Carrot,Useful,Food,FoodMagicCarrot,Amplified,False
+Cookies,Useful,Food,FoodCookies,Amplified,False
+Magic Cookies,Useful,Food,FoodMagicCookies,Amplified,False
+Strength Charm,Useful,Charm,CharmStrength,Base,True
+Risk Charm,Useful,Charm,CharmRisk,Base,True
+Protection Charm,Useful,Charm,CharmProtection,Base,True
+Nazar Charm,Useful,Charm,CharmNazar,Base,True
+Gluttony Charm,Useful,Charm,CharmGluttony,Base,True
+Frost Charm,Useful,Charm,CharmFrost,Base,True
+Bomb Charm,Useful,Charm,CharmBomb,Amplified,True
+Grenade Charm,Useful,Charm,CharmGrenade,Amplified,True
+Throwing Charm,Useful,Charm,Sync_CharmThrowing,Synchrony,False
+Heart Container,Useful,Heart,MiscHeartContainer,Base,True
+Double Heart Container,Useful,Heart,MiscHeartContainer2,Base,True
+Cursed Heart Container,Useful,Heart,MiscHeartContainerCursed,Amplified,True
+Double Cursed Heart Container,Useful,Heart,MiscHeartContainerCursed2,Amplified,True
+Empty Heart Container,Useful,Heart,MiscHeartContainerEmpty,Base,True
+Double Empty Heart Container,Useful,Heart,MiscHeartContainerEmpty2,Base,True
+Dove Familiar,Useful,Familiar,FamiliarDove,Amplified,False
+Ice Spirit Familiar,Useful,Familiar,FamiliarIceSpirit,Amplified,False
+Shopkeeper Familiar,Useful,Familiar,FamiliarShopkeeper,Amplified,False
+Rat Familiar,Useful,Familiar,FamiliarRat,Amplified,False
+Holster,Useful,Storage,Holster,Base,False
+Backpack,Useful,Storage,HudBackpack,Base,True
+Pack of Holding,Useful,Storage,BagHolding,Base,False
+War Drum,Useful,Misc,WarDrum,Amplified,False
+Blood Drum,Useful,Misc,BloodDrum,Base,False
+Heart Transplant,Useful,Misc,HeartTransplant,Base,False
+Holy Water,Useful,Misc,HolyWater,Base,False
+Cursed Potion,Useful,Misc,CursedPotion,Base,False
+Throwing Stars,Useful,Misc,ThrowingStars,Amplified,False
+Map,Useful,Misc,MiscMap,Base,True
+Compass,Useful,Misc,MiscCompass,Base,True
+Coupon,Useful,Misc,MiscCoupon,Base,True
+Monkey's Paw,Useful,Misc,Amplified,Base,True
