@@ -15,7 +15,9 @@ base_chars = [
     "Dorian",
     "Coda"
 ]
+
 amplified_chars = [ "Nocturna", "Diamond", "Mary", "Tempo" ]
+
 synchrony_chars = [ "Chaunter", "Klarinetta", "Suzu" ]
 
 def get_available_characters(items_list: List[ItemDict], options: CotNDOptions):

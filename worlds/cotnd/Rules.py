@@ -3,24 +3,19 @@ from BaseClasses import LocationProgressType, MultiWorld
 from worlds.generic.Rules import set_rule
 
 from .Characters import base_chars, amplified_chars, synchrony_chars
-from .Locations import (
-    all_zones_clear_locations,
-    dungeon_master_locations,
-    hephaestus_locations,
-    merlin_locations,
-    zone_clear_locations,
-)
 
 
-def set_rules(world: MultiWorld, player: int, available_chars: List[str]):
+def set_rules(world: MultiWorld, player: int, locations: List[str], available_chars: List[str], dlcs: List[str], all_zones_goal_clear: int):
 
-    clear_locations = zone_clear_locations + all_zones_clear_locations
-    lobby_locations = hephaestus_locations + merlin_locations + dungeon_master_locations
+    all_chars = base_chars
 
-    all_chars = base_chars + amplified_chars + synchrony_chars
+    if "Amplified" in dlcs:
+        all_chars += amplified_chars
+    if "Synchrony" in dlcs:
+        all_chars += synchrony_chars
 
     zone_clear_locations_by_character = [
-        [location for location in clear_locations if location.startswith(f"{char}")]
+        [location for location in locations if location.startswith(f"{char}")]
         for char in all_chars
     ]
 
@@ -34,9 +29,11 @@ def set_rules(world: MultiWorld, player: int, available_chars: List[str]):
             if char not in available_chars:
                 loc.progress_type = LocationProgressType.EXCLUDED
 
+    lobby_locations = [location for location in locations if location.startswith("Hephaestus") or location.startswith("Merlin") or location.startswith("Dungeon Master")]
+
     for location in lobby_locations:
         set_rule(world.get_location(location, player), lambda state: True)
 
     world.completion_condition[player] = (
-        lambda state: state.has(f"Complete", player, 8)
+        lambda state: state.has(f"Complete", player, all_zones_goal_clear)
     )
