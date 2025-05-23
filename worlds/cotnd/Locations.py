@@ -1,75 +1,205 @@
-from typing import Dict, List
+from typing import Dict, List, TypedDict, Tuple
 from BaseClasses import Location
 from .Options import CotNDOptions
 from .Characters import base_chars, amplified_chars, synchrony_chars
 
+base_code = 742_080
+shop_location_range = {"start": 742_187, "end": 742_289}
 
 class CotNDLocation(Location):
-    game: str = "Crypt of the Necrodancer"
+    game: str = "Crypt of the NecroDancer"
 
 
-base_zone_clear_locations = [
-    f"{char} - Zone {zone}" for char in base_chars for zone in range(1, 6)
-]
-amp_zone_clear_locations = [
-    f"{char} - Zone {zone}" for char in amplified_chars for zone in range(1, 6)
-]
-sync_zone_clear_locations = [
-    f"{char} - Zone {zone}" for char in synchrony_chars for zone in range(1, 6)
-]
+class LocationDict(TypedDict):
+    name: str
+    code: int
 
-base_all_zones_clear_locations = [f"{char} - All Zones" for char in base_chars]
-amp_all_zones_clear_locations = [f"{char} - All Zones" for char in amplified_chars]
-sync_all_zones_clear_locations = [f"{char} - All Zones" for char in synchrony_chars]
 
-zone_clear_locations = (
-    base_zone_clear_locations + amp_zone_clear_locations + sync_zone_clear_locations
-)
-all_zones_clear_locations = (
-    base_all_zones_clear_locations
-    + amp_all_zones_clear_locations
-    + sync_all_zones_clear_locations
-)
+zone_clear = {
+    "location_text": {
+        "single_zone": "Zone",
+        "all_zones": "All Zones"
+    },
+    "location_zones": {
+        "base": 4,
+        "amplified": 1,
+        "synchrony": 0
+    },
+    "location_chars": {
+        "base": base_chars,
+        "amplified": amplified_chars,
+        "synchrony": synchrony_chars
+    }
+}
 
-hephaestus_locations = (
-    [f"Hephaestus - Left Shop Item {i}" for i in range(1, 18)]
-    + [f"Hephaestus - Center Shop Item {i}" for i in range(1, 33)]
-    + [f"Hephaestus - Right Shop Item {i}" for i in range(1, 14)]
-)
+hephaestus = {
+    "location_text": {
+        "left": "Hephaestus - Left Shop Item",
+        "center": "Hephaestus - Center Shop Item",
+        "right": "Hephaestus - Right Shop Item"
+    },
+    "location_amounts": {
+        "base": {
+            "left": 11,
+            "center": 19,
+            "right": 8
+        },
+        "amplified": {
+            "left": 3,
+            "center": 13,
+            "right": 4
+        },
+        "synchrony": {
+            "left": 3,
+            "center": 0,
+            "right": 1
+        }
+    }
+}
 
-merlin_locations = (
-    [f"Merlin - Left Shop Item {i}" for i in range(1, 6)]
-    + [f"Merlin - Center Shop Item {i}" for i in range(1, 15)]
-    + [f"Merlin - Right Shop Item {i}" for i in range(1, 14)]
-)
+merlin = {
+    "location_text": {
+        "left": "Merlin - Left Shop Item",
+        "center": "Merlin - Center Shop Item",
+        "right": "Merlin - Right Shop Item"
+    },
+    "location_amounts": {
+        "base": {
+            "left": 5,
+            "center": 11,
+            "right": 7
+        },
+        "amplified": {
+            "left": 0,
+            "center": 3,
+            "right": 6
+        },
+        "synchrony": {
+            "left": 0,
+            "center": 0,
+            "right": 0
+        }
+    }
+}
 
+# Dungeon Master locations are base game
 dungeon_master_locations = (
-    [f"Dungeon Master - Left Shop Item {i}" for i in range(1, 4)]
-    + [f"Dungeon Master - Center Shop Item {i}" for i in range(1, 3)]
-    + [f"Dungeon Master - Right Shop Item {i}" for i in range(1, 4)]
-)
-
-all_locations = (
-    zone_clear_locations
-    + hephaestus_locations
-    + merlin_locations
-    + dungeon_master_locations
+        [f"Dungeon Master - Left Shop Item {i}" for i in range(1, 4)]
+        + [f"Dungeon Master - Center Shop Item {i}" for i in range(1, 3)]
+        + [f"Dungeon Master - Right Shop Item {i}" for i in range(1, 4)]
 )
 
 
-def get_regions_to_locations(options: CotNDOptions):
-    zone_locations = base_zone_clear_locations
-    all_zones_locations = base_all_zones_clear_locations
+def build_location_dicts(locations: List[str], starting_code: int = base_code) -> List[LocationDict]:
+    return [{"name": name, "code": starting_code + i} for i, name in enumerate(locations)]
 
-    if "Amplified" in options.dlc.value:
-        zone_locations += amp_zone_clear_locations
-        all_zones_locations += amp_all_zones_clear_locations
 
-    if "Synchrony" in options.dlc.value:
-        zone_locations += sync_zone_clear_locations
-        all_zones_locations += sync_all_zones_clear_locations
+def get_shop_locations(dlcs: List[str]) -> List[str]:
+    shop_locations = dungeon_master_locations.copy()
+
+    hephaestus_locations = hephaestus["location_amounts"]["base"].copy()
+    merlin_locations = merlin["location_amounts"]["base"].copy()
+
+    if "Amplified" in dlcs:
+        for key in hephaestus_locations:
+            hephaestus_locations[key] += hephaestus["location_amounts"]["amplified"].get(key, 0)
+            merlin_locations[key] += merlin["location_amounts"]["amplified"].get(key, 0)
+
+    if "Synchrony" in dlcs:
+        for key in hephaestus_locations:
+            hephaestus_locations[key] += hephaestus["location_amounts"]["synchrony"].get(key, 0)
+            merlin_locations[key] += merlin["location_amounts"]["synchrony"].get(key, 0)
+
+    for direction, amount in hephaestus_locations.items():
+        shop_locations += [f"{hephaestus['location_text'][direction]} {i}" for i in range(1, amount + 1)]
+
+    for direction, amount in merlin_locations.items():
+        shop_locations += [f"{merlin['location_text'][direction]} {i}" for i in range(1, amount + 1)]
+
+    return shop_locations
+
+
+def get_shop_locations_numbers(dlcs: List[str]):
+    hephaestus_locations = hephaestus["location_amounts"]["base"].copy()
+    merlin_locations = merlin["location_amounts"]["base"].copy()
+
+    if "Amplified" in dlcs:
+        for key in hephaestus_locations:
+            hephaestus_locations[key] += hephaestus["location_amounts"]["amplified"].get(key, 0)
+            merlin_locations[key] += merlin["location_amounts"]["amplified"].get(key, 0)
+
+    if "Synchrony" in dlcs:
+        for key in hephaestus_locations:
+            hephaestus_locations[key] += hephaestus["location_amounts"]["synchrony"].get(key, 0)
+            merlin_locations[key] += merlin["location_amounts"]["synchrony"].get(key, 0)
 
     return {
-        "Menu": hephaestus_locations + merlin_locations + dungeon_master_locations,
-        "Crypt": zone_locations + all_zones_locations,
+        "hephaestus_locations": hephaestus_locations,
+        "merlin_locations": merlin_locations,
+        "dungeon_master_locations": {
+            "left": 3,
+            "center": 2,
+            "right": 4
+        }
     }
+
+
+def get_zone_clear_locations(dlcs: List[str]) -> Tuple[List[str], List[str]]:
+    zone_clear_locations = []
+    all_zones_clear_locations = []
+
+    characters = zone_clear["location_chars"]["base"].copy()
+    zone_amount = zone_clear["location_zones"]["base"]
+
+    if "Amplified" in dlcs:
+        characters += zone_clear["location_chars"]["amplified"]
+        zone_amount += zone_clear["location_zones"]["amplified"]
+    if "Synchrony" in dlcs:
+        characters += zone_clear["location_chars"]["synchrony"]
+        zone_amount += zone_clear["location_zones"]["synchrony"]
+
+    for character in characters:
+        zone_clear_locations += [f"{character} - {zone_clear['location_text']['single_zone']} {zone}" for zone in
+                                 range(1, zone_amount + 1)]
+        all_zones_clear_locations += [f"{character} - {zone_clear['location_text']['all_zones']}"]
+
+    return zone_clear_locations, all_zones_clear_locations
+
+
+def get_all_locations() -> List[LocationDict]:
+    zone_locations, all_zone_locations = get_zone_clear_locations(["Amplified", "Synchrony"])
+    shop_locations = get_shop_locations(["Amplified", "Synchrony"])
+    return build_location_dicts(zone_locations + all_zone_locations + shop_locations)
+
+
+def get_available_locations(dlcs: List[str]) -> List[LocationDict]:
+    zone_locations, all_zone_locations = get_zone_clear_locations(dlcs)
+    shop_locations = get_shop_locations(dlcs)
+
+    raw_locations = zone_locations + all_zone_locations + shop_locations
+    return [all_locations[location_name] for location_name in raw_locations]
+
+
+def get_regions_to_locations(options: CotNDOptions) -> Dict[str, List[LocationDict]]:
+    locations = get_available_locations(options.dlc.value)
+
+    zone_locations = [loc for loc in locations if "Zone" in loc["name"]]
+    shop_locations = [loc for loc in locations if "Zone" not in loc["name"]]
+
+    return {
+        "Menu": shop_locations,
+        "Crypt": zone_locations,
+    }
+
+
+def from_id(location_id: int) -> LocationDict:
+    matching = [item for item in all_locations.values() if item['code'] == location_id]
+    if len(matching) == 0:
+        raise ValueError(f"No item data for item id '{location_id}'")
+    assert len(matching) < 2, f"Multiple item data with id '{location_id}. Please report."
+    return matching[0]
+
+
+all_locations = {
+    location["name"]: location for location in get_all_locations()
+}
