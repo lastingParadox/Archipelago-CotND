@@ -14,9 +14,10 @@ Diamond,Progression,Character,Diamond,Amplified,False
 Mary,Progression,Character,Mary,Amplified,True
 Tempo,Progression,Character,Tempo,Amplified,True
 Reaper,Progression,Character,Reaper,Base,True
-Klarinetta,Progression,Character,Klarinetta,Synchrony,True
-Chaunter,Progression,Character,Chaunter,Synchrony,True
-Suzu,Progression,Character,Suzu,Synchrony,True
+Klarinetta,Progression,Character,Sync_Klarinetta,Synchrony,True
+Chaunter,Progression,Character,Sync_Chaunter,Synchrony,True
+Suzu,Progression,Character,Sync_Suzu,Synchrony,True
+Miku,Progression,Character,Coldsteel_Coldsteel,Miku,True
 Leather Armor,Useful,Armor,ArmorLeather,Base,True
 Chainmail,Useful,Armor,ArmorChainmail,Base,False
 Plate Armor,Useful,Armor,ArmorPlatemail,Base,False
@@ -71,7 +72,7 @@ Ring of Mana,Useful,Ring,RingMana,Base,False
 Ring of Might,Useful,Ring,RingMight,Base,False
 Ring of Protection,Useful,Ring,RingProtection,Base,False
 Ring of Regeneration,Useful,Ring,RingRegeneration,Base,False
-Ring of Shielding,Useful,Ring,RingShielfing,Base,False
+Ring of Shielding,Useful,Ring,RingShielding,Base,False
 Ring of War,Useful,Ring,RingWar,Base,False
 Ring of Courage,Useful,Ring,RingCourage,Base,False
 Ring of Peace,Useful,Ring,RingPeace,Base,False
@@ -88,7 +89,7 @@ Frost Dagger,Useful,Weapon,WeaponDaggerFrost,Base,True
 Broadsword,Useful,Weapon,WeaponBroadsword,Base,True
 Longsword,Useful,Weapon,WeaponLongsword,Base,False
 Spear,Useful,Weapon,WeaponSpear,Base,False
-Trident,Useful,Weapon,WeaponTrident,Synchrony,False
+Trident,Useful,Weapon,Sync_WeaponTrident,Synchrony,False
 Bow,Useful,Weapon,WeaponBow,Base,True
 Staff,Useful,Weapon,WeaponStaff,Amplified,False
 Whip,Useful,Weapon,WeaponWhip,Base,False
@@ -179,4 +180,4 @@ Throwing Stars,Useful,Misc,ThrowingStars,Amplified,False
 Map,Useful,Misc,MiscMap,Base,True
 Compass,Useful,Misc,MiscCompass,Base,True
 Coupon,Useful,Misc,MiscCoupon,Base,True
-Monkey's Paw,Useful,Misc,Amplified,Base,True
+Monkey's Paw,Useful,Misc,MiscMonkeyPaw,Amplified,True

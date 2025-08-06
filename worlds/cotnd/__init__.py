@@ -21,9 +21,12 @@ from .Rules import set_rules
 
 def launch_client():
     from .Client import launch
-    launch_subprocess(launch, name="CotNDCLient")
+    launch_subprocess(launch, name="CotNDClient")
 
-components.append(Component("Crypt of the Necrodancer Client", "CotNDClient", func=launch_client, component_type=Type.CLIENT))
+
+components.append(
+    Component("Crypt of the NecroDancer Client", func=launch_client, component_type=Type.CLIENT))
+
 
 class CotNDWeb(WebWorld):
     theme = "partyTime"
@@ -54,15 +57,18 @@ class CotNDWorld(World):
     options: CotNDOptions
     item_name_to_id = {item['name']: item['code'] for item in all_items.values()}
     location_name_to_id = {location['name']: location['code'] for location in all_locations.values()}
+    topology_present = True
 
     item_name_groups = {}
 
     def generate_early(self) -> None:
         self.dlcs = set(self.options.dlc.value)
         self.items = get_items_list(self.options.character_blacklist.value, self.options.dlc.value,
-                                    self.options.randomize_characters.value, self.options.randomize_starting_items.value)
+                                    self.options.randomize_characters.value,
+                                    self.options.randomize_starting_items.value,
+                                    self.options.included_extra_modes.value)
         self.chars = get_available_characters(self.items, self.options)
-        self.locations = get_available_locations(self.options.dlc.value)
+        self.locations = get_available_locations(self.options.dlc.value, self.options.included_extra_modes.value)
 
         # If starting items are randomized, we don't want to give the player default items.
         if not self.options.randomize_starting_items:
@@ -70,7 +76,8 @@ class CotNDWorld(World):
                 self.multiworld.push_precollected(self.create_item(item['name']))
 
         # Give starting characters
-        temp_char_list = [item for item in self.items if item["type"] == "Character" and item["name"] not in self.options.character_blacklist]
+        temp_char_list = [item for item in self.items if
+                          item["type"] == "Character" and item["name"] not in self.options.character_blacklist]
         for _ in range(3):
             choice = self.multiworld.random.choice(temp_char_list)
             self.multiworld.push_precollected(self.create_item(choice['name']))
@@ -133,7 +140,9 @@ class CotNDWorld(World):
         return CotNDItem(event, ItemClassification.progression, None, self.player)
 
     def set_rules(self) -> None:
-        set_rules(self.multiworld, self.player, [location['name'] for location in self.locations], [item["name"] for item in self.chars], self.options.dlc.value, self.options.all_zones_goal_clear.value)
+        set_rules(self.multiworld, self.player, [location['name'] for location in self.locations],
+                  [item["name"] for item in self.chars], self.options.dlc.value,
+                  self.options.all_zones_goal_clear.value)
 
     def fill_slot_data(self) -> Dict[str, Any]:
         return self.options.as_dict(
@@ -142,5 +151,6 @@ class CotNDWorld(World):
             "character_blacklist",
             "randomize_starting_items",
             "randomize_characters",
-            "all_zones_goal_clear"
+            "all_zones_goal_clear",
+            "included_extra_modes"
         )
