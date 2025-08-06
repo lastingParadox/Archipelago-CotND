@@ -16,9 +16,12 @@ base_chars = [
     "Coda"
 ]
 
-amplified_chars = [ "Nocturna", "Diamond", "Mary", "Tempo" ]
+amplified_chars = ["Nocturna", "Diamond", "Mary", "Tempo"]
 
-synchrony_chars = [ "Chaunter", "Klarinetta", "Suzu" ]
+synchrony_chars = ["Chaunter", "Klarinetta", "Suzu"]
+
+miku_chars = ["Miku"]
 
 def get_available_characters(items_list: List[ItemDict], options: CotNDOptions):
-    return [item for item in items_list if item["type"] == "Character" and item["name"] not in options.character_blacklist.value]
+    return [item for item in items_list if
+            item["type"] == "Character" and item["name"] not in options.character_blacklist.value]

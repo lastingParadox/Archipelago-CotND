@@ -64,9 +64,9 @@ def get_filler_items():
     return load_item_csv("ap_items.csv")
 
 def get_items_list(character_blacklist: List[str], dlc: List[str],
-                   randomize_characters: int, randomize_starting_items: int):
+                   randomize_characters: int, randomize_starting_items: int, game_modes: List[str]):
     # Base item list with all items
-    filtered_items = load_item_csv()
+    filtered_items = load_item_csv() + load_item_csv("game_modes.csv")
 
     # Map blacklisted characters to be Filler
     for item in filtered_items:
@@ -77,6 +77,14 @@ def get_items_list(character_blacklist: List[str], dlc: List[str],
     filtered_items = list(
         filter(
             lambda item: item["dlc"] == "Base" or item["dlc"] in dlc,
+            filtered_items,
+        )
+    )
+
+    # Remove game modes from run not included in options
+    filtered_items = list(
+        filter(
+            lambda item: item["type"] != "Mode" or item["name"].removesuffix(" Mode") in game_modes,
             filtered_items,
         )
     )
@@ -99,7 +107,7 @@ def get_items_list(character_blacklist: List[str], dlc: List[str],
     return filtered_items
 
 def get_all_items():
-    raw_items = load_item_csv() + load_item_csv("ap_items.csv")
+    raw_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("ap_items.csv")
 
     for index, item in enumerate(raw_items):
         item["code"] = base_code + index

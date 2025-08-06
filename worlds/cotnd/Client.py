@@ -4,6 +4,7 @@ import logging
 import os
 import platform
 import time
+import urllib.parse
 from math import floor
 from typing import List, Any, Set, Optional, Dict
 
@@ -11,7 +12,8 @@ import ModuleUpdate
 from CommonClient import CommonContext, ClientCommandProcessor, get_base_parser
 from NetUtils import ClientStatus
 from Utils import async_start, init_logging
-from worlds.cotnd.Locations import shop_location_range
+from worlds.cotnd.Locations import shop_location_range, from_id as location_from_id, all_locations
+from worlds.cotnd.Items import from_id as item_from_id
 
 ModuleUpdate.update()
 system = platform.system()
@@ -19,12 +21,14 @@ system = platform.system()
 if __name__ == '__main__':
     init_logging("CotNDClient", exception_logger="Client")
 
+
 class CotNDCommandProcessor(ClientCommandProcessor):
     def _cmd_deathlink(self):
         """Toggle deathlink."""
         if isinstance(self.ctx, CotNDContext):
             self.ctx.deathlink = not self.ctx.deathlink
             asyncio.create_task(self.ctx.update_death_link(self.ctx.deathlink), name="Update Deathlink")
+
 
 class CotNDContext(CommonContext):
     game = "Crypt of the NecroDancer"
@@ -72,20 +76,20 @@ class CotNDContext(CommonContext):
     def on_cotnd_connect_to_ap(self):
         """When the client connects to both CotND and AP"""
         print("Sending randomizer data to CotND")
+        print(self.slotdata)
         self.cotnd_handler.enqueue({
             "datatype": "State",
             "connected": True,
-            "seed_name": self.seed_name,
-            "slot": self.slot,
-            "slot_name": self.player_names[self.slot],
-            "goal": self.slotdata.get("goal")
+            "goal": self.slotdata.get("all_zones_goal_clear"),
+            "deathlink": "DeathLink" in self.tags,
+            "extra_modes": self.slotdata.get("included_extra_modes")
         })
 
         self.cotnd_handler.enqueue({
             "datatype": "Locations",
             "resync": True,
-            "missing_locations": list(self.missing_locations),
-            "checked_locations": list(self.checked_locations)
+            "missing_locations": list([location_from_id(location)["name"] for location in self.missing_locations]),
+            "checked_locations": list([location_from_id(location)["name"] for location in self.checked_locations])
         })
 
         self.resync_items = True
@@ -94,7 +98,7 @@ class CotNDContext(CommonContext):
         async_start(self.send_msgs([{
             "cmd": "LocationScouts",
             "locations": [location_id for location_id in self.missing_locations if (
-                shop_location_range["start"] <= location_id <= shop_location_range["end"])]
+                    shop_location_range["start"] <= location_id <= shop_location_range["end"])]
         }]))
 
     def on_cotnd_reader_connected(self):
@@ -119,10 +123,13 @@ class CotNDContext(CommonContext):
                     async def cotnd_connect_hint():
                         await asyncio.sleep(1.0)
                         self.logger.info("Waiting for Crypt of the NecroDancer to be launched.")
+
                     async_start(cotnd_connect_hint())
 
             elif cmd == "ReceivedItems":
-                items = [netitem.item for netitem in args["items"]]
+                items = [
+                    {"item": item_from_id(netitem.item)["cotnd_id"], "location_code": str(netitem.location), "playername": self.player_names[netitem.player]} for netitem in
+                    args["items"]]
                 self.cotnd_handler.enqueue({
                     "datatype": "Items",
                     "items": items,
@@ -132,29 +139,58 @@ class CotNDContext(CommonContext):
 
             elif cmd == "RoomUpdate":
                 if args.get("checked_locations"):
-                    locations = [location_id for location_id in args.get("checked_locations")]
-                    self.cotnd_handler.enqueue({ "datatype": "Locations", "checked_locations": locations })
+                    locations = [location_from_id(location_id)["name"] for location_id in args.get("checked_locations")]
+                    self.cotnd_handler.enqueue({"datatype": "Locations", "checked_locations": locations})
 
             elif cmd == "LocationInfo":
                 locs = args.get("locations")
+                location_info = []
                 for loc in locs:
-                    self.cotnd_handler.enqueue({
-                        "datatype": "LocationInfo",
-                        "location_info": {
-                            "location": loc.location,
-                            "item": loc.item,
-                            "player": loc.player,
-                            "itemname": self.item_names.lookup_in_slot(loc.item, loc.player),
-                            "playername": self.player_names[loc.player],
-                            "flags": loc.flagsm
-                        },
-                    }, False)
+                    location = location_from_id(loc.location)
+                    try:
+                        item = item_from_id(loc.item)
+                    except ValueError:
+                        item = {
+                            "name": self.item_names.lookup_in_slot(loc.item, loc.player),
+                            "classification": loc.flags,
+                            "type": "APItem",
+                            "cotnd_id": "APItem",
+                            "dlc": "Base",
+                            "isDefault": False,
+                            "code": loc.item
+                        }
+
+                    location_info.append({
+                        "location": location["name"],
+                        "location_code": str(loc.location),
+                        "item": item["cotnd_id"],
+                        "playername": self.player_names[loc.player],
+                        "itemname": item["name"],
+                        "flags": loc.flags
+                    })
+
+                self.cotnd_handler.enqueue({
+                    "datatype": "LocationInfo",
+                    "location_info": location_info,
+                }, False)
         except Exception as e:
             self.logger.error(f"CotND on_package error: {e}")
 
         return super().on_package(cmd, args)
 
     async def disconnect(self, allow_autoreconnect: bool = False):
+        self.cotnd_handler.enqueue({
+            "datatype": "Disconnected",
+        })
+
+        # Wait for CotND data to flush (with timeout to avoid hanging forever)
+        start = time.time()
+        while (
+                self.cotnd_handler.outgoing_data_dirty
+                and time.time() - start < 2  # 2 seconds max wait
+        ):
+            await asyncio.sleep(0.05)
+
         self.connected_to_ap = False
         await super().disconnect(allow_autoreconnect)
 
@@ -184,15 +220,12 @@ class CotNDContext(CommonContext):
                 else:
                     print("DeathLink is disabled.")
 
-            elif eventtype == "Item":
-                loc_id = event.get("source")
-                if loc_id is not None:
-                    print(" Item:", loc_id)
-                    self.locations_checked.add(loc_id)
+            elif eventtype == "Location":
                 locs = event.get("sources")
                 if locs is not None:
-                    self.locations_checked.update(locs)
-                await self.send_msgs([{ "cmd": "LocationChecks", "locations": self.locations_checked }])
+                    resolved_ids = [all_locations[name]["code"] for name in locs if name in all_locations]
+                    self.locations_checked.update(resolved_ids)
+                await self.send_msgs([{"cmd": "LocationChecks", "locations": self.locations_checked}])
 
             elif eventtype == "ScoutLocation":
                 loc_id = event.get("id")
@@ -207,6 +240,7 @@ class CotNDContext(CommonContext):
         except Exception as e:
             self.logger.error(f"Manage event error ({eventtype}): {e}")
 
+
 class CotNDHandler:
     logger = logging.getLogger("CotNDInterface")
     ctx = None
@@ -217,7 +251,7 @@ class CotNDHandler:
     outgoing_data_dirty = False
     waiting_for_cotnd = False
     connected_timestamp = time.time()
-    session_id: Optional[int] = None # DST's connected timestamp
+    session_id: Optional[int] = None  # DST's connected timestamp
     _cached_timestamps: Dict[str, Set[int]] = {
         "Death": set(),
         "Hint": set(),
@@ -226,6 +260,8 @@ class CotNDHandler:
     def __init__(self, ctx: CotNDContext):
         self.ctx = ctx
         self._connected = False
+        self.last_mod_message_time = time.time()
+        self.disconnect_timeout = 10  # seconds
 
     @property
     def connected(self):
@@ -239,8 +275,9 @@ class CotNDHandler:
                 self._sendqueue.clear()
                 self._sendqueue_lowpriority.clear()
 
-    def enqueue(self, data, priority = True):
+    def enqueue(self, data, priority=True):
         if self.connected:
+            data["timestamp"] = time.time()
             (self._sendqueue if priority else self._sendqueue_lowpriority).append(data)
             self.outgoing_data_dirty = True
 
@@ -250,7 +287,7 @@ class CotNDHandler:
             if datatype == "Victory":
                 if not self.ctx.finished_game:
                     await self.handle_cotnd_filedata_entry({"datatype": datatype})
-            elif datatype == "Item":
+            elif datatype == "Location":
                 _sources: Set[int] = set(data)
                 _sources.difference_update(self.ctx.checked_locations)
                 if len(_sources):
@@ -262,7 +299,8 @@ class CotNDHandler:
                 for deathdata in data:
                     timestamp: Optional[int] = deathdata.get("timestamp")
                     # Verify timestamp hasn't been sent yet and is after connection time
-                    if timestamp and timestamp > self.connected_timestamp and not timestamp in self._cached_timestamps[datatype]:
+                    if timestamp and timestamp > self.connected_timestamp and not timestamp in self._cached_timestamps[
+                        datatype]:
                         self._cached_timestamps[datatype].add(timestamp)
                         await self.handle_cotnd_filedata_entry({
                             "datatype": datatype,
@@ -278,6 +316,8 @@ class CotNDHandler:
                             "datatype": datatype,
                             "id": scout_id
                         })
+            elif datatype == "Bounce":
+                self.outgoing_data_dirty = True
 
     async def handle_cotnd_filedata_entry(self, data: Dict[str, Any]):
         """Sends data over to CotNDContext for event handling."""
@@ -285,10 +325,10 @@ class CotNDHandler:
             datatype: str = data.get("datatype")
 
             if datatype in {"Chat", "Join", "Leave", "Death", "Connect", "Disconnect", "DeathLink"}:
-                 # Instant event
+                # Instant event
                 await self.ctx.manage_event(data)
 
-            elif datatype in {"Item", "Hint", "Victory", "ScoutLocation"}:
+            elif datatype in {"Location", "Hint", "Victory", "ScoutLocation"}:
                 # Queued event
                 await self.ctx.queue_event(data)
 
@@ -322,36 +362,44 @@ class CotNDHandler:
 
     def read_incoming_data(self, base_dir: str) -> Optional[Dict]:
         """Read AP data coming from CotND."""
-        out_file = base_dir + "out.log"
+        out_file = base_dir + "/out.log"
         if os.path.isfile(out_file):
-            raw = ""
             with open(out_file) as f:
                 raw = f.read()
 
-            data = json.loads(raw)
+            data = json.loads(raw or "{}")
+            self.last_mod_message_time = time.time()
 
             # Check timestamp
             _timestamp: int = data.get("timestamp", floor(time.time()))
             _time_delta = floor(time.time()) - _timestamp
-            if _time_delta > (60 * 3):
+            if _time_delta > self.disconnect_timeout:
                 print(f"Current data is too old! It's from {_time_delta} seconds ago.")
                 return None
             return data
         return None
 
-    def write_outgoing_data(self, base_dir: str):
+    def write_outgoing_data(self, base_dir: str, main_data: Dict[str, any] = None):
         """Send AP data to CotND."""
-        if not self.outgoing_data_dirty:
-            return
+        in_file = base_dir + "/in.log"
+
+        # Skip writing if data is not dirty and the in.log file already has content
+        if not self.outgoing_data_dirty and os.path.exists(in_file):
+            if os.path.getsize(in_file) > 0:
+                return
+
         self.outgoing_data_dirty = False
-        in_file = base_dir + "in.log"
 
         send_data = {
             "seed_name": self.ctx.seed_name,
             "slot": self.ctx.slot,
+            "slot_name": self.ctx.player_names[self.ctx.slot],
             "connected_timestamp": floor(self.connected_timestamp),
             "timestamp": floor(time.time())
         }
+
+        if main_data:
+            send_data.update(main_data)
 
         if not self.waiting_for_cotnd:
             send_data["data"] = self._sendqueue
@@ -393,16 +441,17 @@ class CotNDHandler:
         while True:
             connect_data = self.read_incoming_data(base_dir)
             # Todo: This is unstable, please fix
-            if connect_data is not None and connect_data["ap_connected"]:
+            if connect_data is not None and connect_data.get("ModStart") == True:
                 break
             else:
                 if not self.waiting_for_cotnd:
                     self.waiting_for_cotnd = True
-                    self.logger.info("Waiting to connect to Crypt of the NecroDancer. Please load into the lobby to connect.")
+                    self.logger.info(
+                        "Waiting to connect to Crypt of the NecroDancer. Please head to the Archipelago trap and select \"Connect\".")
                 await asyncio.sleep(2.0)
 
         self.waiting_for_cotnd = False
-        self.logger.info(f"Connected to Crypt of the NecroDancer.")
+        self.logger.info(f"Detected Crypt of the NecroDancer AP Mod.")
 
         while self.ctx.connected_to_ap:
             try:
@@ -414,6 +463,11 @@ class CotNDHandler:
                     await self.handle_incoming_filedata(incoming_data)
                 else:
                     break
+
+                if time.time() - self.last_mod_message_time > self.disconnect_timeout:
+                    self.logger.warning(
+                        f"No response from Crypt of the NecroDancer for over {self.disconnect_timeout} seconds. Disconnecting.")
+                    break  # This will exit handle_io and trigger reconnection
             except Exception as e:
                 self.logger.error(f"CotND Handle IO Error: {e}")
                 raise
@@ -435,7 +489,17 @@ def launch():
     import colorama
 
     parser = get_base_parser(description="CotND Archipelago Client for interfacing with Crypt of the NecroDancer.")
+    parser.add_argument("--name", default=None, help="Slot Name to connect as.")
+    parser.add_argument("url", nargs="?", help="Archipelago connection url")
     args = parser.parse_args()
+
+    if args.url:
+        url = urllib.parse.urlparse(args.url)
+        args.connect = url.netloc
+        if url.username:
+            args.name = urllib.parse.unquote(url.username)
+        if url.password:
+            args.password = urllib.parse.unquote(url.password)
 
     colorama.init()
 
