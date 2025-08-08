@@ -18,6 +18,15 @@ from .Options import CotNDOptions
 from .Regions import cotnd_regions
 from .Rules import set_rules
 
+def ensure_min_max(self, min_name: str, max_name: str) -> None:
+    min_val = getattr(self.options, min_name).value
+    max_val = getattr(self.options, max_name).value
+
+    if max_val < min_val:
+        print(f"[WARNING] Swapping {min_name} ({min_val}) and {max_name} ({max_val}) to maintain proper bounds.")
+        setattr(self.options, min_name, type(getattr(self.options, min_name))(max_val))
+        setattr(self.options, max_name, type(getattr(self.options, max_name))(min_val))
+
 
 def launch_client():
     from .Client import launch
@@ -69,6 +78,12 @@ class CotNDWorld(World):
                                     self.options.included_extra_modes.value)
         self.chars = get_available_characters(self.items, self.options)
         self.locations = get_available_locations(self.options.dlc.value, self.options.included_extra_modes.value)
+
+        # Options validation
+        ensure_min_max(self,"randomized_price_min", "randomized_price_max")
+        ensure_min_max(self,"filler_price_min", "filler_price_max")
+        ensure_min_max(self,"useful_price_min", "useful_price_max")
+        ensure_min_max(self,"progression_price_min", "progression_price_max")
 
         # If starting items are randomized, we don't want to give the player default items.
         if not self.options.randomize_starting_items:
@@ -152,5 +167,14 @@ class CotNDWorld(World):
             "randomize_starting_items",
             "randomize_characters",
             "all_zones_goal_clear",
-            "included_extra_modes"
+            "included_extra_modes",
+            "price_randomization",
+            "randomized_price_min",
+            "randomized_price_max",
+            "filler_price_min",
+            "filler_price_max",
+            "useful_price_min",
+            "useful_price_max",
+            "progression_price_min",
+            "progression_price_max"
         )

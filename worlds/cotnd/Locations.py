@@ -4,7 +4,7 @@ from .Options import CotNDOptions, all_game_modes
 from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars
 
 base_code = 742_080
-shop_location_range = {"start": 742_187, "end": 742_289}
+shop_location_range = {"start": 742_080, "end": 742_182}
 
 
 class CotNDLocation(Location):
@@ -219,7 +219,7 @@ def get_all_locations() -> List[LocationDict]:
     zone_locations, all_zone_locations = get_zone_clear_locations(["Amplified", "Synchrony", "Miku"])
     extra_mode_locations = get_extra_mode_clear_locations(["Amplified", "Synchrony", "Miku"], all_game_modes)
     shop_locations = get_shop_locations(["Amplified", "Synchrony"])
-    return build_location_dicts(zone_locations + all_zone_locations + shop_locations + extra_mode_locations)
+    return build_location_dicts(shop_locations + zone_locations + all_zone_locations + extra_mode_locations)
 
 
 def get_available_locations(dlcs: List[str], extra_modes: List[str] = None) -> List[LocationDict]:
@@ -229,7 +229,7 @@ def get_available_locations(dlcs: List[str], extra_modes: List[str] = None) -> L
     extra_mode_locations = get_extra_mode_clear_locations(dlcs, extra_modes)
     shop_locations = get_shop_locations(dlcs)
 
-    raw_locations = zone_locations + all_zone_locations + shop_locations + extra_mode_locations
+    raw_locations = shop_locations + zone_locations + all_zone_locations + extra_mode_locations
     return [all_locations[location_name] for location_name in raw_locations]
 
 

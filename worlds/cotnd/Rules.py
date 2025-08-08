@@ -83,7 +83,7 @@ def set_rules(world: MultiWorld, player: int, locations: List[str], available_ch
         location for location in locations if location.startswith(("Hephaestus", "Merlin", "Dungeon Master"))
     ]
 
-    set_soft_shop_rules(world, player, lobby_locations, get_shop_slot_lengths(dlcs), all_chars)
+    set_soft_shop_rules(world, player, lobby_locations, get_shop_slot_lengths(dlcs), available_chars)
 
     world.completion_condition[player] = (
         lambda state: state.has("Complete", player, all_zones_goal_clear)
