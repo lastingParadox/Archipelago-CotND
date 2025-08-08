@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 import platform
 import time
@@ -9,7 +8,7 @@ from math import floor
 from typing import List, Any, Set, Optional, Dict
 
 import ModuleUpdate
-from CommonClient import CommonContext, ClientCommandProcessor, get_base_parser
+from CommonClient import CommonContext, ClientCommandProcessor, get_base_parser, logger
 from NetUtils import ClientStatus
 from Utils import async_start, init_logging
 from worlds.cotnd.Locations import shop_location_range, from_id as location_from_id, all_locations
@@ -26,20 +25,26 @@ class CotNDCommandProcessor(ClientCommandProcessor):
     def _cmd_deathlink(self):
         """Toggle deathlink."""
         if isinstance(self.ctx, CotNDContext):
-            self.ctx.deathlink = not self.ctx.deathlink
-            asyncio.create_task(self.ctx.update_death_link(self.ctx.deathlink), name="Update Deathlink")
+            self.ctx.death_link_enabled = not self.ctx.death_link_enabled
+            asyncio.create_task(self.ctx.update_death_link(self.ctx.death_link_enabled), name="Update Deathlink")
+            message = f"Deathlink {'enabled' if self.ctx.death_link_enabled else 'disabled'}"
+            logger.info(message)
+            self.ctx.cotnd_handler.enqueue({
+                "datatype": "SetDeathLink",
+                "deathlink": self.ctx.death_link_enabled
+            })
 
 
 class CotNDContext(CommonContext):
     game = "Crypt of the NecroDancer"
+    command_processor = CotNDCommandProcessor
     items_handling = 0b111
     want_slot_data = True
-    logger = logging.getLogger("CotNDInterface")
     slotdata = dict()
     resync_items = False
-    lockable_items = set()
     cotnd_handler = None
     connected_to_ap = False
+    death_link_enabled = False
     _eventqueue: List[Dict] = []
 
     def __init__(self, server_address, password):
@@ -76,13 +81,31 @@ class CotNDContext(CommonContext):
     def on_cotnd_connect_to_ap(self):
         """When the client connects to both CotND and AP"""
         print("Sending randomizer data to CotND")
-        print(self.slotdata)
         self.cotnd_handler.enqueue({
             "datatype": "State",
             "connected": True,
             "goal": self.slotdata.get("all_zones_goal_clear"),
             "deathlink": "DeathLink" in self.tags,
-            "extra_modes": self.slotdata.get("included_extra_modes")
+            "extra_modes": self.slotdata.get("included_extra_modes"),
+            "pricing": {
+                "type": self.slotdata.get("price_randomization"),
+                "general_price_range": {
+                    "min": self.slotdata.get("randomized_price_min"),
+                    "max": self.slotdata.get("randomized_price_max"),
+                },
+                "filler_price_range": {
+                    "min": self.slotdata.get("filler_price_min"),
+                    "max": self.slotdata.get("filler_price_max"),
+                },
+                "useful_price_range": {
+                    "min": self.slotdata.get("useful_price_min"),
+                    "max": self.slotdata.get("useful_price_max"),
+                },
+                "progression_price_range": {
+                    "min": self.slotdata.get("progression_price_min"),
+                    "max": self.slotdata.get("progression_price_max"),
+                },
+            }
         })
 
         self.cotnd_handler.enqueue({
@@ -106,7 +129,7 @@ class CotNDContext(CommonContext):
             self.on_cotnd_connect_to_ap()
             async_start(self.send_msgs([{"cmd": "Sync"}]))
         else:
-            self.logger.info("Waiting to connect to Archipelago.")
+            logger.info("Waiting to connect to Archipelago.")
 
     def on_package(self, cmd: str, args: Dict):
         try:
@@ -118,17 +141,24 @@ class CotNDContext(CommonContext):
                 self.slotdata = args.get("slot_data", {})
                 if self.cotnd_handler.connected:
                     print("Connected to AP!")
+
+                    if "death_link" in self.slotdata:
+                        self.death_link_enabled = bool(self.slotdata.get("death_link"))
+                        async_start(self.update_death_link(self.death_link_enabled))
+
                     self.on_cotnd_connect_to_ap()
                 else:
                     async def cotnd_connect_hint():
                         await asyncio.sleep(1.0)
-                        self.logger.info("Waiting for Crypt of the NecroDancer to be launched.")
+                        logger.info("Waiting for Crypt of the NecroDancer to be launched.")
 
                     async_start(cotnd_connect_hint())
 
             elif cmd == "ReceivedItems":
                 items = [
-                    {"item": item_from_id(netitem.item)["cotnd_id"], "location_code": str(netitem.location), "playername": self.player_names[netitem.player]} for netitem in
+                    {"item": item_from_id(netitem.item)["cotnd_id"], "item_name": item_from_id(netitem.item)["name"],
+                     "location_code": str(netitem.location), "playername": self.player_names[netitem.player]} for
+                    netitem in
                     args["items"]]
                 self.cotnd_handler.enqueue({
                     "datatype": "Items",
@@ -174,7 +204,7 @@ class CotNDContext(CommonContext):
                     "location_info": location_info,
                 }, False)
         except Exception as e:
-            self.logger.error(f"CotND on_package error: {e}")
+            logger.error(f"CotND on_package error: {e}")
 
         return super().on_package(cmd, args)
 
@@ -208,7 +238,7 @@ class CotNDContext(CommonContext):
                 while self.connected_to_ap and len(self._eventqueue):
                     await self.manage_event(self._eventqueue.pop(0))
             except Exception as e:
-                self.logger.error(f"CotND event queue error: {e}")
+                logger.error(f"CotND event queue error: {e}")
             await asyncio.sleep(3.0)
 
     async def manage_event(self, event: Dict):
@@ -238,11 +268,10 @@ class CotNDContext(CommonContext):
                 await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
 
         except Exception as e:
-            self.logger.error(f"Manage event error ({eventtype}): {e}")
+            logger.error(f"Manage event error ({eventtype}): {e}")
 
 
 class CotNDHandler:
-    logger = logging.getLogger("CotNDInterface")
     ctx = None
     lastping = time.time()
     _sendqueue: List[Any] = []
@@ -344,14 +373,14 @@ class CotNDHandler:
         elif system == 'Linux':
             data_path = os.path.expanduser('~/.local/share/NecroDancer')
         else:
-            self.logger.error(f'Unrecognized operating system {system}, please report.')
+            logger.error(f'Unrecognized operating system {system}, please report.')
             raise RuntimeError(f'Unsupported operating system: {system}')
 
         """in.log sends data into the game. out.log gets data out from the game."""
         if not os.path.exists(data_path):
             message = (f'No local data found for NecroDancer at {data_path}. '
                        'Please install and run Crypt of the NecroDancer before attempting to run this client.')
-            self.logger.error(message)
+            logger.error(message)
             raise FileNotFoundError(message)
 
         ap_path = os.path.join(data_path, 'archipelago')
@@ -409,7 +438,7 @@ class CotNDHandler:
             f.write(json.dumps(send_data))
 
     async def run_reader(self):
-        self.logger.info(f"Running Crypt of the NecroDancer Client")
+        logger.info(f"Running Crypt of the NecroDancer Client")
         while True:
             try:
                 base_dir = self.get_data_folder_path()
@@ -419,10 +448,10 @@ class CotNDHandler:
 
                     await self.handle_io(base_dir)
                     self.connected = False
-                    self.logger.info(f"Disconnected from Crypt of the NecroDancer (timed out)")
+                    logger.info(f"Disconnected from Crypt of the NecroDancer (timed out)")
                     await asyncio.sleep(3.0)
             except Exception as e:
-                self.logger.error(f"CotND file reader error: {e}")
+                logger.error(f"CotND file reader error: {e}")
             finally:
                 self.connected = False
             print("Restarting connection loop in 5 seconds.")
@@ -446,12 +475,12 @@ class CotNDHandler:
             else:
                 if not self.waiting_for_cotnd:
                     self.waiting_for_cotnd = True
-                    self.logger.info(
+                    logger.info(
                         "Waiting to connect to Crypt of the NecroDancer. Please head to the Archipelago trap and select \"Connect\".")
                 await asyncio.sleep(2.0)
 
         self.waiting_for_cotnd = False
-        self.logger.info(f"Detected Crypt of the NecroDancer AP Mod.")
+        logger.info(f"Detected Crypt of the NecroDancer AP Mod.")
 
         while self.ctx.connected_to_ap:
             try:
@@ -465,11 +494,11 @@ class CotNDHandler:
                     break
 
                 if time.time() - self.last_mod_message_time > self.disconnect_timeout:
-                    self.logger.warning(
+                    logger.warning(
                         f"No response from Crypt of the NecroDancer for over {self.disconnect_timeout} seconds. Disconnecting.")
                     break  # This will exit handle_io and trigger reconnection
             except Exception as e:
-                self.logger.error(f"CotND Handle IO Error: {e}")
+                logger.error(f"CotND Handle IO Error: {e}")
                 raise
 
 
