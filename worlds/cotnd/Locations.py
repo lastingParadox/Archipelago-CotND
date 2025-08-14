@@ -121,6 +121,7 @@ def get_shop_locations(dlcs: List[str]) -> List[str]:
 
     return shop_locations
 
+
 def get_shop_slot_lengths(dlcs: List[str]) -> Dict[str, int]:
     slot_lengths = {}
 
@@ -172,7 +173,7 @@ def get_shop_locations_numbers(dlcs: List[str]):
     }
 
 
-def get_zone_clear_locations(dlcs: List[str]) -> Tuple[List[str], List[str]]:
+def get_zone_clear_locations(dlcs: List[str], excluded_chars: List[str] = None) -> Tuple[List[str], List[str]]:
     zone_clear_locations = []
     all_zones_clear_locations = []
 
@@ -189,14 +190,19 @@ def get_zone_clear_locations(dlcs: List[str]) -> Tuple[List[str], List[str]]:
         characters += zone_clear["location_chars"]["miku"]
         zone_amount += zone_clear["location_zones"]["miku"]
 
+    if excluded_chars:
+        for char in excluded_chars:
+            characters.remove(char)
+
     for character in characters:
         zone_clear_locations += [f"{character} - {zone_clear['location_text']['single_zone']} {zone}" for zone in
-                                 range(1, zone_amount + 1)]
+                                 range(1, int(zone_amount) + 1)]
         all_zones_clear_locations += [f"{character} - {zone_clear['location_text']['all_zones']}"]
 
     return zone_clear_locations, all_zones_clear_locations
 
-def get_extra_mode_clear_locations(dlcs: List[str], modes: List[str]) -> List[str]:
+
+def get_extra_mode_clear_locations(dlcs: List[str], modes: List[str], excluded_chars: List[str] = None) -> List[str]:
     extra_mode_clear_locations = []
 
     characters = zone_clear["location_chars"]["base"].copy()
@@ -208,12 +214,16 @@ def get_extra_mode_clear_locations(dlcs: List[str], modes: List[str]) -> List[st
     if "Miku" in dlcs:
         characters += zone_clear["location_chars"]["miku"]
 
+    if excluded_chars:
+        for char in excluded_chars:
+            characters.remove(char)
 
     for character in characters:
         for mode in modes:
             extra_mode_clear_locations += [f"{character} - {mode} Mode"]
 
     return extra_mode_clear_locations
+
 
 def get_all_locations() -> List[LocationDict]:
     zone_locations, all_zone_locations = get_zone_clear_locations(["Amplified", "Synchrony", "Miku"])
@@ -222,11 +232,12 @@ def get_all_locations() -> List[LocationDict]:
     return build_location_dicts(shop_locations + zone_locations + all_zone_locations + extra_mode_locations)
 
 
-def get_available_locations(dlcs: List[str], extra_modes: List[str] = None) -> List[LocationDict]:
+def get_available_locations(dlcs: List[str], character_blacklist: List[str] = None, extra_modes: List[str] = None) -> \
+        List[LocationDict]:
     if extra_modes is None:
         extra_modes = []
-    zone_locations, all_zone_locations = get_zone_clear_locations(dlcs)
-    extra_mode_locations = get_extra_mode_clear_locations(dlcs, extra_modes)
+    zone_locations, all_zone_locations = get_zone_clear_locations(dlcs, character_blacklist)
+    extra_mode_locations = get_extra_mode_clear_locations(dlcs, extra_modes, character_blacklist)
     shop_locations = get_shop_locations(dlcs)
 
     raw_locations = shop_locations + zone_locations + all_zone_locations + extra_mode_locations
@@ -234,7 +245,8 @@ def get_available_locations(dlcs: List[str], extra_modes: List[str] = None) -> L
 
 
 def get_regions_to_locations(options: CotNDOptions) -> Dict[str, List[LocationDict]]:
-    locations = get_available_locations(options.dlc.value, options.included_extra_modes.value)
+    locations = get_available_locations(options.dlc.value, options.character_blacklist.value,
+                                        options.included_extra_modes.value)
 
     zone_locations = [loc for loc in locations if "Zone" in loc["name"] or "Mode" in loc["name"]]
     shop_locations = [loc for loc in locations if "Zone" not in loc["name"] and "Mode" not in loc["name"]]
