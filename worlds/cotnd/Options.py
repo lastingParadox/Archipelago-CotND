@@ -69,7 +69,7 @@ class AllZonesGoalClear(Range):
 
     display_name = "Characters Required for All Zones"
     range_start = 1
-    range_end = 18
+    range_end = 19
     default = 8
 
 

@@ -23,6 +23,33 @@ class ItemDict(TypedDict):
     isDefault: bool
     code: int
 
+def char_to_cotnd_id(character: str) -> str:
+    match character:
+        case "Klarinetta":
+            return "Sync_Klarinetta"
+        case "Suzu":
+            return "Sync_Suzu"
+        case "Chaunter":
+            return "Sync_Chaunter"
+        case "Miku":
+            return "Coldsteel_Coldsteel"
+        case _:
+            return character
+
+def cotnd_id_to_char(cotnd_id: str) -> str:
+    match cotnd_id:
+        case "Sync_Klarinetta":
+            return "Klarinetta"
+        case "Sync_Suzu":
+            return "Suzu"
+        case "Sync_Chaunter":
+            return "Chaunter"
+        case "Coldsteel_Coldsteel":
+            return "Miku"
+        case _:
+            return cotnd_id
+
+
 def load_item_csv(file_path: str = "items.csv") -> List[ItemDict]:
     items: List[ItemDict] = []
     with files(data).joinpath(file_path).open() as csvfile:
@@ -68,7 +95,13 @@ def get_items_list(character_blacklist: List[str], dlc: List[str],
     # Base item list with all items
     filtered_items = load_item_csv() + load_item_csv("game_modes.csv")
 
-    # Map blacklisted characters to be Filler
+    # Remove blacklisted characters from item list
+    filtered_items = list(
+        filter(
+            lambda item: cotnd_id_to_char(item["cotnd_id"]) not in character_blacklist,
+            filtered_items
+        )
+    )
     for item in filtered_items:
         if item["name"] in character_blacklist:
             item["classification"] = ItemClassification.filler

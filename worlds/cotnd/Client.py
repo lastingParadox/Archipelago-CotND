@@ -55,6 +55,7 @@ class CotNDContext(CommonContext):
         self.cotnd_handler.enqueue({
             "datatype": "Death",
             "msg": data.get("cause"),
+            "source": data.get("source"),
             "timestamp": time.time(),
         })
 
@@ -325,16 +326,11 @@ class CotNDHandler:
                         "sources": list(_sources)
                     })
             elif datatype == "Death":
-                for deathdata in data:
-                    timestamp: Optional[int] = deathdata.get("timestamp")
-                    # Verify timestamp hasn't been sent yet and is after connection time
-                    if timestamp and timestamp > self.connected_timestamp and not timestamp in self._cached_timestamps[
-                        datatype]:
-                        self._cached_timestamps[datatype].add(timestamp)
-                        await self.handle_cotnd_filedata_entry({
-                            "datatype": datatype,
-                            "msg": deathdata.get("msg", "")
-                        })
+                message = data.get("msg", "")
+                await self.handle_cotnd_filedata_entry({
+                    "datatype": datatype,
+                    "msg": message
+                })
             elif datatype == "ScoutLocation":
                 _scouts: Set[int] = set(data)
                 _scouts.difference_update(self.filedata_location_scouts)

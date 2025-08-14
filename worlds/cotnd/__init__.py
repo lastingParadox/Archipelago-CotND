@@ -18,6 +18,7 @@ from .Options import CotNDOptions
 from .Regions import cotnd_regions
 from .Rules import set_rules
 
+
 def ensure_min_max(self, min_name: str, max_name: str) -> None:
     min_val = getattr(self.options, min_name).value
     max_val = getattr(self.options, max_name).value
@@ -70,6 +71,11 @@ class CotNDWorld(World):
 
     item_name_groups = {}
 
+    dlcs = []
+    chars = []
+    items = []
+    locations = []
+
     def generate_early(self) -> None:
         self.dlcs = set(self.options.dlc.value)
         self.items = get_items_list(self.options.character_blacklist.value, self.options.dlc.value,
@@ -77,13 +83,18 @@ class CotNDWorld(World):
                                     self.options.randomize_starting_items.value,
                                     self.options.included_extra_modes.value)
         self.chars = get_available_characters(self.items, self.options)
-        self.locations = get_available_locations(self.options.dlc.value, self.options.included_extra_modes.value)
+        self.locations = get_available_locations(self.options.dlc.value, self.options.character_blacklist.value,
+                                                 self.options.included_extra_modes.value)
 
         # Options validation
-        ensure_min_max(self,"randomized_price_min", "randomized_price_max")
-        ensure_min_max(self,"filler_price_min", "filler_price_max")
-        ensure_min_max(self,"useful_price_min", "useful_price_max")
-        ensure_min_max(self,"progression_price_min", "progression_price_max")
+        if self.options.all_zones_goal_clear.value > len(self.chars):
+            print(f"[WARNING] Setting the All Zones goal to {len(self.chars)} to maintain progression.")
+            self.options.all_zones_goal_clear.value = len(self.chars)
+
+        ensure_min_max(self, "randomized_price_min", "randomized_price_max")
+        ensure_min_max(self, "filler_price_min", "filler_price_max")
+        ensure_min_max(self, "useful_price_min", "useful_price_max")
+        ensure_min_max(self, "progression_price_min", "progression_price_max")
 
         # If starting items are randomized, we don't want to give the player default items.
         if not self.options.randomize_starting_items:

@@ -8,7 +8,7 @@ from .Locations import get_shop_slot_lengths
 from .Options import all_chars
 
 
-def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], slot_lengths: Dict[str, int], all_chars: List[str]):
+def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], slot_lengths: Dict[str, int], chars: List[str]):
     shop_pattern = re.compile(r"^(Hephaestus|Merlin|Dungeon Master) - (Left|Center|Right) Shop Item (\d+)$")
 
     for location in locations:
@@ -28,12 +28,11 @@ def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], sl
             continue
 
         depth_ratio = index / total_in_slot
-        required_chars = max(1, int(depth_ratio * 6))  # Adjust 6 for pacing
+        required_chars = max(1, int(depth_ratio * max(len(chars), 6)))  # Adjust 6 for pacing at most
 
-        # ✅ Capture values as default args to prevent closure issues
         set_rule(
             loc,
-            lambda state, req=required_chars, chars=all_chars: sum(
+            lambda state, req=required_chars: sum(
                 1 for c in chars if state.has(c, player)
             ) >= req
         )
