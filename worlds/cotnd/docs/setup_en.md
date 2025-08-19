@@ -15,7 +15,8 @@
    ```json
    "scriptWhitelist":["necro.*","system.game.Audio","system.game.Bitmap","system.game.Entities","system.game.FileIO","system.game.Graphics","system.game.Input","system.network.IPC","system.events.*","system.gfx.*","system.i18n.*","system.utils.*", "system.file.Storage"]
    ```
-5. Head over to your NecroDancer local data directory and insert the mod downloaded from the [releases](https://github.com/lastingParadox/Archipelago-CotND/releases/latest) page into either your `downloadedMods` or your `mods` folder.
+5. Head over to your NecroDancer local data directory and insert the mod downloaded from the [mod page](https://mod.io/g/crypt/m/ap) into your `downloadedMods` folder. A list of file directories for this manual install are provided.
+   - Note that you can skip this step if you want to use the in-game mod browser. Just search "Archipelago Redux" and install.
    - Windows: `%LOCALAPPDATA%\NecroDancer`
    - Mac: `~/Library/Application Support/NecroDancer`
    - Linux: `~/.local/share/NecroDancer`
