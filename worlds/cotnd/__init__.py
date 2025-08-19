@@ -2,8 +2,8 @@ from typing import Any, Dict
 
 from BaseClasses import ItemClassification, Region, Tutorial
 from worlds.AutoWorld import World, WebWorld
-from worlds.LauncherComponents import Component, components, Type, launch_subprocess
-from .Characters import get_available_characters
+from worlds.LauncherComponents import Component, components, Type, launch_subprocess, icon_paths
+from .Characters import get_available_characters, get_all_characters
 from .Items import (
     get_items_list,
     all_items,
@@ -34,8 +34,9 @@ def launch_client():
     launch_subprocess(launch, name="CotNDClient")
 
 
+icon_paths["cotnd_ico"] = f"ap:{__name__}/data/icon.png"
 components.append(
-    Component("Crypt of the NecroDancer Client", func=launch_client, component_type=Type.CLIENT))
+    Component("Crypt of the NecroDancer Client", func=launch_client, component_type=Type.CLIENT, icon="cotnd_ico"))
 
 
 class CotNDWeb(WebWorld):
@@ -77,34 +78,54 @@ class CotNDWorld(World):
     locations = []
 
     def generate_early(self) -> None:
+        # Prepare items & locations
         self.dlcs = set(self.options.dlc.value)
-        self.items = get_items_list(self.options.character_blacklist.value, self.options.dlc.value,
-                                    self.options.randomize_characters.value,
-                                    self.options.randomize_starting_items.value,
-                                    self.options.included_extra_modes.value)
-        self.chars = get_available_characters(self.items, self.options)
-        self.locations = get_available_locations(self.options.dlc.value, self.options.character_blacklist.value,
-                                                 self.options.included_extra_modes.value)
 
-        # Options validation
-        if self.options.all_zones_goal_clear.value > len(self.chars):
-            print(f"[WARNING] Setting the All Zones goal to {len(self.chars)} to maintain progression.")
-            self.options.all_zones_goal_clear.value = len(self.chars)
+        all_chars = get_all_characters(self.dlcs)
+        # If blacklist contains all available characters, remove Cadence
+        blacklist = set(self.options.character_blacklist.value)
+        if set(all_chars).issubset(set(blacklist)):
+            print("[WARNING] Removing Cadence from the blacklist to maintain progression.")
+            blacklist = [c for c in blacklist if c != "Cadence"]
+            self.options.character_blacklist.value = blacklist
 
-        ensure_min_max(self, "randomized_price_min", "randomized_price_max")
-        ensure_min_max(self, "filler_price_min", "filler_price_max")
-        ensure_min_max(self, "useful_price_min", "useful_price_max")
-        ensure_min_max(self, "progression_price_min", "progression_price_max")
+        # Items & locations after blacklist adjustment
+        self.items = get_items_list(
+            blacklist,
+            self.options.dlc.value,
+            self.options.included_extra_modes.value
+        )
+        self.locations = get_available_locations(
+            self.options.dlc.value,
+            blacklist,
+            self.options.included_extra_modes.value
+        )
 
-        # If starting items are randomized, we don't want to give the player default items.
-        if not self.options.randomize_starting_items:
-            for item in get_default_items(self.options.dlc, self.options.randomize_characters):
-                self.multiworld.push_precollected(self.create_item(item['name']))
+        # Available characters
+        self.chars = get_available_characters(self.items, self.dlcs, blacklist)
+
+        # Cap a value to available character count with a warning
+        def cap_option(option_name: str):
+            option = getattr(self.options, option_name)
+            if option.value > len(self.chars):
+                print(
+                    f"[WARNING] Setting {option_name.replace('_', ' ')} to {len(self.chars)} to maintain progression.")
+                option.value = len(self.chars)
+
+        cap_option("starting_characters_amount")
+        cap_option("all_zones_goal_clear")
+
+        # Ensure price ranges are valid
+        for prefix in ("randomized", "filler", "useful", "progression"):
+            ensure_min_max(self, f"{prefix}_price_min", f"{prefix}_price_max")
+
+        # Give default non-character items
+        for item in get_default_items(self.options.dlc):
+            self.multiworld.push_precollected(self.create_item(item['name']))
 
         # Give starting characters
-        temp_char_list = [item for item in self.items if
-                          item["type"] == "Character" and item["name"] not in self.options.character_blacklist]
-        for _ in range(3):
+        temp_char_list = [c for c in self.items if c["type"] == "Character" and c["name"] not in blacklist]
+        for _ in range(self.options.starting_characters_amount.value):
             choice = self.multiworld.random.choice(temp_char_list)
             self.multiworld.push_precollected(self.create_item(choice['name']))
             temp_char_list.remove(choice)
@@ -126,7 +147,7 @@ class CotNDWorld(World):
                 {
                     location['name']: (
                         location['code']
-                        if "All Zones" not in location['name']
+                        if "Beat All Zones" not in location['name']
                         else None
                     )
                     for location in regions_to_locations[region_name]
@@ -139,7 +160,7 @@ class CotNDWorld(World):
 
         # Create victory event pairs
         for character in self.chars:
-            self.get_location(f"{character['name']} - All Zones").place_locked_item(
+            self.get_location(f"{character['name']} - Beat All Zones").place_locked_item(
                 self.create_event(f"Complete")
             )
 
@@ -175,8 +196,6 @@ class CotNDWorld(World):
             "death_link",
             "dlc",
             "character_blacklist",
-            "randomize_starting_items",
-            "randomize_characters",
             "all_zones_goal_clear",
             "included_extra_modes",
             "price_randomization",

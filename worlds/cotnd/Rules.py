@@ -1,11 +1,10 @@
 import re
 from typing import List, Dict
 from BaseClasses import LocationProgressType, MultiWorld
-from worlds.generic.Rules import set_rule, add_rule
+from worlds.generic.Rules import set_rule
 
 from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars
 from .Locations import get_shop_slot_lengths
-from .Options import all_chars
 
 
 def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], slot_lengths: Dict[str, int], chars: List[str]):
@@ -28,7 +27,7 @@ def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], sl
             continue
 
         depth_ratio = index / total_in_slot
-        required_chars = max(1, int(depth_ratio * max(len(chars), 6)))  # Adjust 6 for pacing at most
+        required_chars = max(1, int(depth_ratio * min(len(chars), 6)))  # Adjust 6 for pacing at most
 
         set_rule(
             loc,

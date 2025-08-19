@@ -197,7 +197,7 @@ def get_zone_clear_locations(dlcs: List[str], excluded_chars: List[str] = None) 
     for character in characters:
         zone_clear_locations += [f"{character} - {zone_clear['location_text']['single_zone']} {zone}" for zone in
                                  range(1, int(zone_amount) + 1)]
-        all_zones_clear_locations += [f"{character} - {zone_clear['location_text']['all_zones']}"]
+        all_zones_clear_locations += [f"{character} - {zone_clear['location_text']['all_zones']}"] + [f"{character} - Beat {zone_clear['location_text']['all_zones']}"]
 
     return zone_clear_locations, all_zones_clear_locations
 

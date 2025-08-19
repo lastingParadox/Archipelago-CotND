@@ -1,8 +1,11 @@
 import asyncio
 import json
+import tempfile
 import os
 import platform
 import time
+import atexit
+import signal
 import urllib.parse
 from math import floor
 from typing import List, Any, Set, Optional, Dict
@@ -88,6 +91,8 @@ class CotNDContext(CommonContext):
             "goal": self.slotdata.get("all_zones_goal_clear"),
             "deathlink": "DeathLink" in self.tags,
             "extra_modes": self.slotdata.get("included_extra_modes"),
+            "dlc": self.slotdata.get("dlc"),
+            "character_blacklist": self.slotdata.get("character_blacklist"),
             "pricing": {
                 "type": self.slotdata.get("price_randomization"),
                 "general_price_range": {
@@ -222,6 +227,7 @@ class CotNDContext(CommonContext):
         ):
             await asyncio.sleep(0.05)
 
+        self.cotnd_handler.remove_lock()
         self.connected_to_ap = False
         await super().disconnect(allow_autoreconnect)
 
@@ -272,26 +278,51 @@ class CotNDContext(CommonContext):
             logger.error(f"Manage event error ({eventtype}): {e}")
 
 
+def atomic_write(path: str, data: dict) -> None:
+    dir_name = os.path.dirname(path)
+    base_name = os.path.basename(path)
+
+    # Make a temp file in the same directory (so rename is atomic)
+    fd, tmp_path = tempfile.mkstemp(prefix=base_name, dir=dir_name)
+    try:
+        with os.fdopen(fd, "w") as tmp:
+            json.dump(data, tmp)
+            tmp.flush()
+            os.fsync(tmp.fileno())  # ensure all bytes are written
+
+        os.replace(tmp_path, path)  # atomic swap
+    finally:
+        if os.path.exists(tmp_path):  # cleanup if something failed
+            os.remove(tmp_path)
+
+
 class CotNDHandler:
     ctx = None
-    lastping = time.time()
     _sendqueue: List[Any] = []
     _sendqueue_lowpriority: List[Any] = []
     filedata_location_scouts: Set[int] = set()
     outgoing_data_dirty = False
     waiting_for_cotnd = False
     connected_timestamp = time.time()
-    session_id: Optional[int] = None  # DST's connected timestamp
-    _cached_timestamps: Dict[str, Set[int]] = {
-        "Death": set(),
-        "Hint": set(),
-    }
+    base_dir = str
+    lock_file: str
 
     def __init__(self, ctx: CotNDContext):
         self.ctx = ctx
         self._connected = False
         self.last_mod_message_time = time.time()
         self.disconnect_timeout = 10  # seconds
+        self.base_dir = self.get_data_folder_path()
+        self.lock_file = os.path.join(self.base_dir, "connection.lock")
+        self._last_mod_ts = 0
+
+        # Clean-up in case of power outages, etc.
+        self.remove_lock()
+
+        # Clean-up on disconnect or signals (Ctrl+C, close, etc)
+        atexit.register(self.remove_lock)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, lambda s, f: self.remove_lock())
 
     @property
     def connected(self):
@@ -310,6 +341,23 @@ class CotNDHandler:
             data["timestamp"] = time.time()
             (self._sendqueue if priority else self._sendqueue_lowpriority).append(data)
             self.outgoing_data_dirty = True
+
+    def create_lock(self):
+        with open(self.lock_file, "w") as f:
+            f.write(str(time.time()))
+            print("Connection lock created.")
+
+    def update_lock(self):
+        with open(self.lock_file, "w") as f:
+            f.write(str(time.time()))
+
+    def remove_lock(self):
+        try:
+            if os.path.exists(self.lock_file):
+                os.remove(self.lock_file)
+                print("Connection lock removed.")
+        except Exception as e:
+            print(f"Failed to remove lock: {e}")
 
     async def handle_incoming_filedata(self, file_data: Dict[str, Any]):
         """Since the filedata is sent all at once and isn't cleared, verifying must be done to reduce redundant data."""
@@ -385,28 +433,33 @@ class CotNDHandler:
 
         return ap_path
 
-    def read_incoming_data(self, base_dir: str) -> Optional[Dict]:
-        """Read AP data coming from CotND."""
-        out_file = base_dir + "/out.log"
-        if os.path.isfile(out_file):
-            with open(out_file) as f:
-                raw = f.read()
+    def read_incoming_data(self) -> Optional[Dict]:
+        """Read AP data coming from CotND, only update heartbeat on new mod timestamp."""
+        out_file = self.base_dir + "/out.log"
+        if not os.path.isfile(out_file):
+            return None
 
+        with open(out_file) as f:
+            raw = f.read()
+
+        try:
             data = json.loads(raw or "{}")
-            self.last_mod_message_time = time.time()
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse out.log: {e}")
+            return None
 
-            # Check timestamp
-            _timestamp: int = data.get("timestamp", floor(time.time()))
-            _time_delta = floor(time.time()) - _timestamp
-            if _time_delta > self.disconnect_timeout:
-                print(f"Current data is too old! It's from {_time_delta} seconds ago.")
-                return None
-            return data
-        return None
+        mod_ts: int = data.get("timestamp")
+        if mod_ts is not None:
+            # Only bump heartbeat if the mod's timestamp has changed
+            if mod_ts != self._last_mod_ts:
+                self.last_mod_message_time = time.time()
+                self._last_mod_ts = mod_ts
 
-    def write_outgoing_data(self, base_dir: str, main_data: Dict[str, any] = None):
+        return data
+
+    def write_outgoing_data(self, main_data: Dict[str, any] = None):
         """Send AP data to CotND."""
-        in_file = base_dir + "/in.log"
+        in_file = self.base_dir + "/in.log"
 
         # Skip writing if data is not dirty and the in.log file already has content
         if not self.outgoing_data_dirty and os.path.exists(in_file):
@@ -430,19 +483,17 @@ class CotNDHandler:
             send_data["data"] = self._sendqueue
             send_data["data_lowpriority"] = self._sendqueue_lowpriority
 
-        with open(in_file, "w") as f:
-            f.write(json.dumps(send_data))
+        atomic_write(in_file, send_data)
 
     async def run_reader(self):
         logger.info(f"Running Crypt of the NecroDancer Client")
         while True:
             try:
-                base_dir = self.get_data_folder_path()
                 if not self.connected:
                     self.connected = True
                     self.ctx.on_cotnd_reader_connected()
 
-                    await self.handle_io(base_dir)
+                    await self.handle_io()
                     self.connected = False
                     logger.info(f"Disconnected from Crypt of the NecroDancer (timed out)")
                     await asyncio.sleep(3.0)
@@ -450,10 +501,11 @@ class CotNDHandler:
                 logger.error(f"CotND file reader error: {e}")
             finally:
                 self.connected = False
+                self.remove_lock()
             print("Restarting connection loop in 5 seconds.")
             await asyncio.sleep(5.0)
 
-    async def handle_io(self, base_dir: str):
+    async def handle_io(self):
         while not self.ctx.seed_name or not self.ctx.slot or not self.ctx.connected_to_ap:
             await asyncio.sleep(0.5)
 
@@ -464,27 +516,27 @@ class CotNDHandler:
         await asyncio.sleep(1.0)
 
         while True:
-            connect_data = self.read_incoming_data(base_dir)
-            # Todo: This is unstable, please fix
+            connect_data = self.read_incoming_data()
             if connect_data is not None and connect_data.get("ModStart") == True:
                 break
             else:
                 if not self.waiting_for_cotnd:
                     self.waiting_for_cotnd = True
                     logger.info(
-                        "Waiting to connect to Crypt of the NecroDancer. Please head to the Archipelago trap and select \"Connect\".")
+                        "Waiting to connect. Please head to the Archipelago trap in-game and select \"Connect\".")
                 await asyncio.sleep(2.0)
 
         self.waiting_for_cotnd = False
         logger.info(f"Detected Crypt of the NecroDancer AP Mod.")
+        self.create_lock()
 
         while self.ctx.connected_to_ap:
             try:
-                self.write_outgoing_data(base_dir)
+                self.update_lock()
+                self.write_outgoing_data()
                 await asyncio.sleep(1.0)
-                incoming_data = self.read_incoming_data(base_dir)
+                incoming_data = self.read_incoming_data()
                 if incoming_data:
-                    # Todo: Seems a bit simplistic, check in future
                     await self.handle_incoming_filedata(incoming_data)
                 else:
                     break
