@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from Options import (
     DeathLinkMixin,
     PerGameCommonOptions,
-    Toggle,
-    DefaultOnToggle,
     Range,
     OptionList, Choice,
 )
@@ -43,34 +41,42 @@ all_game_modes = [
 
 
 class DLC(OptionList):
-    """Which DLCs to include content from. Amplified includes four new characters, a new zone, and new items. Synchrony includes three new characters and new items."""
+    """Which DLCs to include content from.
+    Options include: Amplified, Synchrony, Miku"""
 
     display_name = "DLCs"
     valid_keys = ["Amplified", "Synchrony", "Miku"]
     default = ["Amplified", "Synchrony"]
 
 
+class StartingCharactersAmount(Range):
+    """How many characters to start the game with. Minimum is 1, maximum is 19. Default is 3.
+    Note: If this value exceeds the number of characters in the pool, then this value will equal that number."""
+
+    display_name = "Starting Characters Amount"
+    range_start = 1
+    range_end = 19
+    default = 3
+
+
 class CharacterBlacklist(OptionList):
-    """Which characters to exclude from progression."""
+    """Which characters to include in checks and progression. Note that this will disable the character from the run entirely if excluded.
+    Options include: Cadence, Melody, Aria, Nocturna, Eli, Bolt, Diamond, Chaunter, Dove, Bard, Mary, Suzu, Monk, Reaper, Tempo, Dorian, Coda, Klarinetta, Miku
+    Note: If this list consists of all available characters, then Cadence will be removed from the blacklist to prevent progression issues."""
 
     display_name = "Character Blacklist"
     valid_keys = frozenset(all_chars)
     default = ["Coda"]
 
 
-class RandomizeCharacters(DefaultOnToggle):
-    """Whether to include characters in the randomization. Note: If disabled, 8 characters will be unlocked at the start of the run."""
-
-    display_name = "Randomize Characters"
-
-
 class AllZonesGoalClear(Range):
-    """Determines how many character completions are required for the All Zones goal. Default is 8. Note: If this value exceeds the number of characters in the pool, then this value will equal the number of characters in the pool."""
+    """Determines how many character completions are required for the All Zones goal. Default is 6.
+    Note: If this value exceeds the number of characters in the pool, then this value will equal that number."""
 
     display_name = "Characters Required for All Zones"
     range_start = 1
     range_end = 19
-    default = 8
+    default = 6
 
 
 class IncludedExtraModes(OptionList):
@@ -80,6 +86,7 @@ class IncludedExtraModes(OptionList):
     display_name = "Included Extra Modes"
     valid_keys = frozenset(all_game_modes)
     default = []
+
 
 class PriceRandomization(Choice):
     """How to randomize diamond prices in the Archipelago lobby.
@@ -96,6 +103,7 @@ class PriceRandomization(Choice):
     option_Complete = 3
     default = 0
 
+
 class RandomizedPriceMin(Range):
     """Determines the minimum diamond price range for items in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla_Rand or Complete."""
 
@@ -103,6 +111,7 @@ class RandomizedPriceMin(Range):
     range_start = 1
     range_end = 100
     default = 1
+
 
 class RandomizedPriceMax(Range):
     """Determines the maximum diamond price range for items in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla_Rand or Complete."""
@@ -112,6 +121,7 @@ class RandomizedPriceMax(Range):
     range_end = 100
     default = 10
 
+
 class FillerPriceMin(Range):
     """Determines the minimum diamond price range for a Filler item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
 
@@ -120,6 +130,7 @@ class FillerPriceMin(Range):
     range_end = 100
     default = 1
 
+
 class FillerPriceMax(Range):
     """Determines the maximum diamond price range for a Filler item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
 
@@ -127,6 +138,7 @@ class FillerPriceMax(Range):
     range_start = 1
     range_end = 100
     default = 4
+
 
 class UsefulPriceMin(Range):
     """Determines the minimum diamond price range for a Useful item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
@@ -144,6 +156,7 @@ class UsefulPriceMax(Range):
     range_start = 1
     range_end = 100
     default = 8
+
 
 class ProgressionPriceMin(Range):
     """Determines the minimum diamond price range for a Progression item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
@@ -163,18 +176,11 @@ class ProgressionPriceMax(Range):
     default = 10
 
 
-class RandomizeStartingItems(Toggle):
-    """Whether to include base items, or items unlocked by default, in progression."""
-
-    display_name = "Randomize Starting Items"
-
-
 @dataclass
 class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     dlc: DLC
+    starting_characters_amount: StartingCharactersAmount
     character_blacklist: CharacterBlacklist
-    randomize_starting_items: RandomizeStartingItems
-    randomize_characters: RandomizeCharacters
     all_zones_goal_clear: AllZonesGoalClear
     included_extra_modes: IncludedExtraModes
     price_randomization: PriceRandomization

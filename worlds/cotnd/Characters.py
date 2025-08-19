@@ -1,5 +1,4 @@
-from .Options import CotNDOptions
-from typing import List
+from typing import List, Set
 from .Items import ItemDict
 
 base_chars = [
@@ -22,6 +21,23 @@ synchrony_chars = ["Chaunter", "Klarinetta", "Suzu"]
 
 miku_chars = ["Miku"]
 
-def get_available_characters(items_list: List[ItemDict], options: CotNDOptions):
-    return [item for item in items_list if
-            item["type"] == "Character" and item["name"] not in options.character_blacklist.value]
+
+def get_all_characters(dlcs: Set[str]):
+    all_chars = base_chars.copy()
+    if "Amplified" in dlcs:
+        all_chars += amplified_chars
+    if "Synchrony" in dlcs:
+        all_chars += synchrony_chars
+    if "Miku" in dlcs:
+        all_chars += miku_chars
+
+    return all_chars
+
+
+def get_available_characters(items_list: List[ItemDict], dlcs: Set[str], blacklist: Set[str]):
+    all_chars = get_all_characters(dlcs)
+
+    return [
+        item for item in items_list
+        if item["type"] == "Character" and item["name"] in all_chars and item["name"] not in blacklist
+    ]
