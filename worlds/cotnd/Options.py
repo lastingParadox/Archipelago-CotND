@@ -41,8 +41,10 @@ all_game_modes = [
 
 
 class DLC(OptionList):
-    """Which DLCs to include content from.
-    Options include: Amplified, Synchrony, Miku"""
+    """Which DLCs to include content from in progression and checks.
+    Options include: Amplified, Synchrony, Miku
+    Note: Excluding the Synchrony DLC does not mean that you can play this APWorld without the Synchrony DLC. This is only to exclude content from the Synchrony DLC in the multiworld.
+    Note: Excluding the Amplified DLC will remove Zone 5 from progression altogether."""
 
     display_name = "DLCs"
     valid_keys = ["Amplified", "Synchrony", "Miku"]
@@ -60,7 +62,7 @@ class StartingCharactersAmount(Range):
 
 
 class CharacterBlacklist(OptionList):
-    """Which characters to include in checks and progression. Note that this will disable the character from the run entirely if excluded.
+    """Which characters to exclude from checks and progression. Note that this will disable the character from the run entirely if included.
     Options include: Cadence, Melody, Aria, Nocturna, Eli, Bolt, Diamond, Chaunter, Dove, Bard, Mary, Suzu, Monk, Reaper, Tempo, Dorian, Coda, Klarinetta, Miku
     Note: If this list consists of all available characters, then Cadence will be removed from the blacklist to prevent progression issues."""
 

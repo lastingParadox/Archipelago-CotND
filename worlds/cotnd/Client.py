@@ -415,7 +415,13 @@ class CotNDHandler:
         elif system == 'Darwin':
             data_path = os.path.expanduser('~/Library/Application Support/NecroDancer')
         elif system == 'Linux':
-            data_path = os.path.expanduser('~/.local/share/NecroDancer')
+            default_path = os.path.expanduser('~/.local/share/NecroDancer')
+            flatpak_path = os.path.expanduser('~/.var/app/com.valvesoftware.Steam/.local/share/NecroDancer')
+
+            if os.path.exists(flatpak_path):
+                data_path = flatpak_path
+            else:
+                data_path = default_path
         else:
             logger.error(f'Unrecognized operating system {system}, please report.')
             raise RuntimeError(f'Unsupported operating system: {system}')
