@@ -138,13 +138,13 @@ Transmute Tome,Useful,Tome,TomeTransmute,Amplified,False
 Pulse Tome,Useful,Tome,TomePulse,Amplified,False
 Earth Tome,Useful,Tome,TomeEarth,Amplified,False
 Apple,Useful,Food,Food1,Base,True
-Magic Apple,Useful,Food,FoodMagic1,Base,True
+Magic Apple,Useful,Food,FoodMagic1,Amplified,True
 Cheese,Useful,Food,Food2,Base,False
-Magic Cheese,Useful,Food,FoodMagic2,Base,False
+Magic Cheese,Useful,Food,FoodMagic2,Amplified,False
 Drumstick,Useful,Food,Food3,Base,False
-Magic Drumstick,Useful,Food,FoodMagic3,Base,False
+Magic Drumstick,Useful,Food,FoodMagic3,Amplified,False
 Ham,Useful,Food,Food4,Base,False
-Magic Ham,Useful,Food,FoodMagic4,Base,False
+Magic Ham,Useful,Food,FoodMagic4,Amplified,False
 Carrot,Useful,Food,FoodCarrot,Amplified,False
 Magic Carrot,Useful,Food,FoodMagicCarrot,Amplified,False
 Cookies,Useful,Food,FoodCookies,Amplified,False
@@ -175,7 +175,7 @@ War Drum,Useful,Misc,WarDrum,Amplified,False
 Blood Drum,Useful,Misc,BloodDrum,Base,False
 Heart Transplant,Useful,Misc,HeartTransplant,Base,False
 Holy Water,Useful,Misc,HolyWater,Base,False
-Cursed Potion,Useful,Misc,CursedPotion,Base,False
+Cursed Potion,Useful,Misc,CursedPotion,Amplified,False
 Throwing Stars,Useful,Misc,ThrowingStars,Amplified,False
 Map,Useful,Misc,MiscMap,Base,True
 Compass,Useful,Misc,MiscCompass,Base,True

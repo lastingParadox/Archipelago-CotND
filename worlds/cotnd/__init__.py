@@ -8,7 +8,7 @@ from .Items import (
     get_items_list,
     all_items,
     ItemDict,
-    CotNDItem, get_default_items, get_filler_items,
+    CotNDItem, get_default_items, get_filler_items, item_name_groups,
 )
 from .Locations import (
     CotNDLocation,
@@ -68,9 +68,8 @@ class CotNDWorld(World):
     options: CotNDOptions
     item_name_to_id = {item['name']: item['code'] for item in all_items.values()}
     location_name_to_id = {location['name']: location['code'] for location in all_locations.values()}
+    item_name_groups = item_name_groups
     topology_present = True
-
-    item_name_groups = {}
 
     dlcs = []
     chars = []

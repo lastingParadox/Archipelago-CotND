@@ -41,3 +41,5 @@ def get_available_characters(items_list: List[ItemDict], dlcs: Set[str], blackli
         item for item in items_list
         if item["type"] == "Character" and item["name"] in all_chars and item["name"] not in blacklist
     ]
+
+all_chars = base_chars + amplified_chars + synchrony_chars + miku_chars
