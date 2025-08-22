@@ -1,9 +1,9 @@
 Display Name,Item Classification,Type,Necrodancer ID,DLC,Default
-No Return Mode,Progression,Mode,APNoReturnMode,Base,False
-Hard Mode,Progression,Mode,APHardMode,Base,False
-Phasing Mode,Progression,Mode,APPhasingMode,Base,False
-Randomizer Mode,Progression,Mode,APRandomizerMode,Base,False
-Mystery Mode,Progression,Mode,APMysteryMode,Base,False
+No Return Mode,Progression,Mode,APNoReturnMode,Amplfied,False
+Hard Mode,Progression,Mode,APHardMode,Amplified,False
+Phasing Mode,Progression,Mode,APPhasingMode,Amplified,False
+Randomizer Mode,Progression,Mode,APRandomizerMode,Amplified,False
+Mystery Mode,Progression,Mode,APMysteryMode,Amplified,False
 No Beat Mode,Progression,Mode,APNoBeatMode,Base,False
 Double Tempo Mode,Progression,Mode,APDoubleTempoMode,Base,False
 Low Percent Mode,Progression,Mode,APLowPercentMode,Base,False

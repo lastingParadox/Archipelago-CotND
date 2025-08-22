@@ -88,6 +88,28 @@ class CotNDWorld(World):
             blacklist = [c for c in blacklist if c != "Cadence"]
             self.options.character_blacklist.value = blacklist
 
+        included_modes = list(self.options.included_extra_modes.value)
+
+        if "Amplified" not in self.dlcs:
+            # Define which modes require Amplified
+            amplified_modes = {
+                "No Return",
+                "Hard",
+                "Phasing",
+                "Randomizer",
+                "Mystery",
+            }
+            # Filter them out
+            before = set(included_modes)
+            included_modes = [mode for mode in included_modes if mode not in amplified_modes]
+
+            removed = before - set(included_modes)
+            if removed:
+                print(f"[WARNING] Removed Amplified-only modes (no Amplified DLC enabled): {', '.join(removed)}")
+
+            self.options.included_extra_modes.value = included_modes
+
+
         # Items & locations after blacklist adjustment
         self.items = get_items_list(
             blacklist,

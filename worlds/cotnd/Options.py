@@ -3,7 +3,7 @@ from Options import (
     DeathLinkMixin,
     PerGameCommonOptions,
     Range,
-    OptionList, Choice,
+    OptionList, Choice, OptionGroup, DefaultOnToggle, Toggle,
 )
 
 all_chars = [
@@ -38,7 +38,6 @@ all_game_modes = [
     "Double Tempo",
     "Low Percent"
 ]
-
 
 class DLC(OptionList):
     """Which DLCs to include content from in progression and checks.
@@ -83,12 +82,23 @@ class AllZonesGoalClear(Range):
 
 class IncludedExtraModes(OptionList):
     """Which game modes to include in checks. Note that this will disable the mode from the run entirely if excluded.
-    Options include: No Return, Hard, Phasing, Randomizer, Mystery, No Beat, Double Tempo, and Low Percent."""
+    Options include: No Return (Amplified), Hard (Amplified), Phasing (Amplified), Randomizer (Amplified), Mystery (Amplified), No Beat, Double Tempo, and Low Percent.
+    Note: If you do not have the Amplified DLC enabled, the modes that require it will be disabled."""
 
     display_name = "Included Extra Modes"
     valid_keys = frozenset(all_game_modes)
     default = []
 
+class LockedLobbyNPCs(DefaultOnToggle):
+    """Determines whether the lobby NPCs will be locked and will need to be saved in a run to unlock them in the lobby. Default is true."""
+
+    display_name = "Locked Lobby NPCs"
+
+class LobbyNPCItems(Toggle):
+    """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead. Default is false.
+    Note: If Locked Lobby NPCs is false, this will be disabled."""
+
+    display_name = "Lobby NPC Items"
 
 class PriceRandomization(Choice):
     """How to randomize diamond prices in the Archipelago lobby.
@@ -194,3 +204,17 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     useful_price_max: UsefulPriceMax
     progression_price_min: ProgressionPriceMin
     progression_price_max: ProgressionPriceMax
+
+option_groups = [
+    OptionGroup("Pricing Options", [
+        PriceRandomization,
+        RandomizedPriceMin,
+        RandomizedPriceMax,
+        FillerPriceMin,
+        FillerPriceMax,
+        UsefulPriceMin,
+        UsefulPriceMax,
+        ProgressionPriceMin,
+        ProgressionPriceMax
+    ])
+]
