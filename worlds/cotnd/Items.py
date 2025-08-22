@@ -10,6 +10,28 @@ from . import data
 
 base_code = 247_080
 
+PLURALS = {
+    "Weapon": "Weapons",
+    "Armor": "Armors",
+    "Head": "Heads",
+    "Feet": "Feet",
+    "Shield": "Shields",
+    "Spell": "Spells",
+    "Scroll": "Scrolls",
+    "Tome": "Tomes",
+    "Food": "Foods",
+    "Charm": "Charms",
+    "Heart": "Hearts",
+    "Familiar": "Familiars",
+    "Storage": "Storages",
+    "Misc": "Misc",
+    "Torch": "Torches",
+    "Shovel": "Shovels",
+    "Ring": "Rings",
+    "Character": "Characters",
+    "Mode": "Modes",
+}
+
 
 class CotNDItem(Item):
     name: str = "Crypt of the NecroDancer"
@@ -150,6 +172,24 @@ def from_id(item_id: int) -> ItemDict:
     return matching[0]
 
 
+def pluralize(word: str) -> str:
+    return PLURALS.get(word, word + "s")
+
+
+def make_item_groups() -> dict[str, set[str]]:
+    groups: dict[str, set[str]] = defaultdict(set)
+
+    for file in ["items.csv", "game_modes.csv"]:
+        for row in load_item_csv(file):
+            type_name = row["type"].strip()
+            group_name = pluralize(type_name)
+            groups[group_name].add(row["name"].strip())
+
+    return dict(groups)
+
+
 all_items = {
     item["name"]: item for item in get_all_items()
 }
+
+item_name_groups = make_item_groups()
