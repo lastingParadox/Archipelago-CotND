@@ -1,7 +1,7 @@
 import re
 from typing import List, Dict
 from BaseClasses import LocationProgressType, MultiWorld
-from worlds.generic.Rules import set_rule
+from worlds.generic.Rules import set_rule, add_rule
 
 from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars
 from .Locations import get_shop_slot_lengths
@@ -37,7 +37,7 @@ def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], sl
         )
 
 def set_rules(world: MultiWorld, player: int, locations: List[str], available_chars: List[str], dlcs: List[str],
-              all_zones_goal_clear: int):
+              goal_clear_req: int, locked_lobby_npcs: bool):
     all_chars = base_chars[:]
 
     if "Amplified" in dlcs:
@@ -83,6 +83,14 @@ def set_rules(world: MultiWorld, player: int, locations: List[str], available_ch
 
     set_soft_shop_rules(world, player, lobby_locations, get_shop_slot_lengths(dlcs), available_chars)
 
+    if locked_lobby_npcs:
+        merlin_locations = [
+            location for location in lobby_locations if location.startswith("Merlin")
+        ]
+
+        for location in merlin_locations:
+            add_rule(world.get_location(location, player), lambda state: state.has("Merlin", player))
+
     world.completion_condition[player] = (
-        lambda state: state.has("Complete", player, all_zones_goal_clear)
+        lambda state: state.has("Complete", player, goal_clear_req)
     )
