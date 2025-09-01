@@ -1,6 +1,5 @@
-from typing import Dict, List, TypedDict, Tuple
+from typing import Dict, List, TypedDict
 from BaseClasses import Location
-from .Options import CotNDOptions, all_game_modes
 from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars
 
 base_code = 742_080
@@ -16,245 +15,217 @@ class LocationDict(TypedDict):
     code: int
 
 
-zone_clear = {
-    "location_text": {
-        "single_zone": "Zone",
-        "all_zones": "All Zones"
-    },
-    "location_zones": {
-        "base": 4,
-        "amplified": 1,
-        "synchrony": 0,
-        "miku": 0
-    },
-    "location_chars": {
-        "base": base_chars,
-        "amplified": amplified_chars,
-        "synchrony": synchrony_chars,
-        "miku": miku_chars
-    }
+DLCS = ["amplified", "synchrony", "miku"]
+
+ZONE_CLEAR_CHARS = {
+    "base": base_chars,
+    "amplified": amplified_chars,
+    "synchrony": synchrony_chars,
+    "miku": miku_chars
 }
 
-hephaestus = {
-    "location_text": {
-        "left": "Hephaestus - Left Shop Item",
-        "center": "Hephaestus - Center Shop Item",
-        "right": "Hephaestus - Right Shop Item"
-    },
+HEPHAESTUS = {
+    "name": "Hephaestus",
     "location_amounts": {
-        "base": {
-            "left": 11,
-            "center": 19,
-            "right": 8
-        },
-        "amplified": {
-            "left": 3,
-            "center": 13,
-            "right": 4
-        },
-        "synchrony": {
-            "left": 3,
-            "center": 0,
-            "right": 1
-        }
+        "base": {"left": 11, "center": 19, "right": 8},
+        "amplified": {"left": 3, "center": 13, "right": 4},
+        "synchrony": {"left": 3, "center": 0, "right": 1}
     }
 }
 
-merlin = {
-    "location_text": {
-        "left": "Merlin - Left Shop Item",
-        "center": "Merlin - Center Shop Item",
-        "right": "Merlin - Right Shop Item"
-    },
+MERLIN = {
+    "name": "Merlin",
     "location_amounts": {
-        "base": {
-            "left": 5,
-            "center": 11,
-            "right": 7
-        },
-        "amplified": {
-            "left": 0,
-            "center": 3,
-            "right": 6
-        },
-        "synchrony": {
-            "left": 0,
-            "center": 0,
-            "right": 0
-        }
+        "base": {"left": 5, "center": 11, "right": 7},
+        "amplified": {"left": 0, "center": 3, "right": 6},
+        "synchrony": {"left": 0, "center": 0, "right": 0}
     }
 }
 
-# Dungeon Master locations are base game
-dungeon_master_locations = (
-        [f"Dungeon Master - Left Shop Item {i}" for i in range(1, 4)]
-        + [f"Dungeon Master - Center Shop Item {i}" for i in range(1, 3)]
-        + [f"Dungeon Master - Right Shop Item {i}" for i in range(1, 4)]
-)
+DUNGEON_MASTER = {
+    "name": "Dungeon Master",
+    "location_amounts": {
+        "base": {"left": 3, "center": 2, "right": 3},
+        "amplified": {"left": 0, "center": 0, "right": 0},
+        "synchrony": {"left": 0, "center": 0, "right": 0}
+    }
+}
 
 
-def build_location_dicts(locations: List[str], starting_code: int = base_code) -> List[LocationDict]:
-    return [{"name": name, "code": starting_code + i} for i, name in enumerate(locations)]
+# ==============================
+# Helpers
+# ==============================
 
+def normalize_dlcs(dlcs: List[str]) -> List[str]:
+    """Normalize DLC names to lowercase."""
+    return [d.lower() for d in dlcs]
+
+
+def apply_dlc_amounts(dlcs: List[str], amounts: Dict[str, Dict[str, int]]) -> Dict[str, int]:
+    """Return totals after applying DLC-specific overrides."""
+    total = amounts["base"].copy()
+    for dlc in dlcs:
+        if dlc in amounts:
+            for key, value in amounts[dlc].items():
+                total[key] = total.get(key, 0) + value
+    return total
+
+
+def get_characters_for_dlcs(dlcs: List[str], blacklist: List[str] | None = None) -> list[str]:
+    """Return all available characters for given DLCs, minus blacklist."""
+    chars: List[str] = ZONE_CLEAR_CHARS["base"].copy()
+    for dlc in DLCS:
+        if dlc in dlcs:
+            chars += ZONE_CLEAR_CHARS[dlc]
+    if blacklist:
+        chars = [c for c in chars if c not in blacklist]
+    return chars
+
+
+def build_location_dicts(zone_locations: List[str]) -> List[LocationDict]:
+    """Convert location names to dicts with placeholder codes."""
+    return [{"name": loc, "code": i} for i, loc in enumerate(zone_locations, start=base_code)]
+
+
+# ==============================
+# Zone Clear Locations
+# ==============================
+
+def get_zone_clear_locations(dlcs: List[str], blacklist: List[str] | None = None) -> tuple[list[str], list[str]]:
+    """Return (zone_clear, all_zone_clear) locations."""
+    dlcs = normalize_dlcs(dlcs)
+    chars = get_characters_for_dlcs(dlcs, blacklist)
+
+    zone_locations = [f"{char} - Zone {zone}" for char in chars for zone in range(1, 6 if "amplified" in dlcs else 5)]
+    all_zone_locations = [f"{char} - All Zones" for char in chars]
+
+    return zone_locations, all_zone_locations
+
+
+# ==============================
+# Event Locations
+# ==============================
+
+def get_event_locations(dlcs: List[str], blacklist: List[str] | None = None, goals: List[int] | None = None) -> List[str]:
+    if goals is None:
+        goals = [0, 1]
+
+    dlcs = normalize_dlcs(dlcs)
+    chars = get_characters_for_dlcs(dlcs, blacklist)
+
+    all_zone_events = [f"{char} - Beat All Zones" for char in chars]
+    zone_events = [f"{char} - Beat Zone {zone}" for char in chars for zone in range(1, 6 if "amplified" in dlcs else 5)]
+
+    event_locations = []
+    if 0 in goals: event_locations += all_zone_events
+    if 1 in goals: event_locations += zone_events
+
+    return event_locations
+
+# ==============================
+# Extra Mode Clear Locations
+# ==============================
+
+EXTRA_MODES = {
+    "base": ["No Beat", "Double Tempo", "Low Percent"],
+    "amplified": ["Phasing", "Randomizer", "Mystery", "Hard", "No Return"],
+}
+
+
+def get_extra_mode_clear_locations(dlcs: List[str], blacklist: List[str] | None = None,
+                                   modes: List[str] | None = None) -> List[str]:
+    """Return extra mode clear locations for allowed modes."""
+    dlcs = normalize_dlcs(dlcs)
+    chars = get_characters_for_dlcs(dlcs, blacklist)
+
+    available_modes = []
+    for dlc, dlc_modes in EXTRA_MODES.items():
+        if dlc == "base" or dlc in dlcs:
+            available_modes += dlc_modes
+
+    if modes:
+        available_modes = [m for m in available_modes if m in modes]
+    else:
+        return []
+
+    return [f"{char} - {mode}" for char in chars for mode in available_modes]
+
+
+# ==============================
+# Lobby NPC Locations
+# ==============================
+
+LOBBY_NPCS = ["Beastmaster", "Merlin", "Bossmaster", "Weaponmaster", "Diamond Dealer"]
+
+
+def get_lobby_npc_locations():
+    return [f"Caged {npc}" for npc in LOBBY_NPCS]
+
+
+# ==============================
+# Shop Locations
+# ==============================
 
 def get_shop_locations(dlcs: List[str]) -> List[str]:
-    shop_locations = dungeon_master_locations.copy()
+    """Return all shop location names based on DLCs."""
+    dlcs = normalize_dlcs(dlcs)
+    shop_locations = []
 
-    hephaestus_locations = hephaestus["location_amounts"]["base"].copy()
-    merlin_locations = merlin["location_amounts"]["base"].copy()
+    heph_totals = apply_dlc_amounts(dlcs, HEPHAESTUS["location_amounts"])
+    merlin_totals = apply_dlc_amounts(dlcs, MERLIN["location_amounts"])
+    dm_totals = apply_dlc_amounts(dlcs, DUNGEON_MASTER["location_amounts"])
 
-    if "Amplified" in dlcs:
-        for key in hephaestus_locations:
-            hephaestus_locations[key] += hephaestus["location_amounts"]["amplified"].get(key, 0)
-            merlin_locations[key] += merlin["location_amounts"]["amplified"].get(key, 0)
-
-    if "Synchrony" in dlcs:
-        for key in hephaestus_locations:
-            hephaestus_locations[key] += hephaestus["location_amounts"]["synchrony"].get(key, 0)
-            merlin_locations[key] += merlin["location_amounts"]["synchrony"].get(key, 0)
-
-    for direction, amount in hephaestus_locations.items():
-        shop_locations += [f"{hephaestus['location_text'][direction]} {i}" for i in range(1, amount + 1)]
-
-    for direction, amount in merlin_locations.items():
-        shop_locations += [f"{merlin['location_text'][direction]} {i}" for i in range(1, amount + 1)]
+    for direction, amount in heph_totals.items():
+        shop_locations += [f"{HEPHAESTUS['name']} - {direction.title()} Shop Item {i}" for i in range(1, amount + 1)]
+    for direction, amount in merlin_totals.items():
+        shop_locations += [f"{MERLIN['name']} - {direction.title()} Shop Item {i}" for i in range(1, amount + 1)]
+    for direction, amount in dm_totals.items():
+        shop_locations += [f"{DUNGEON_MASTER['name']} - {direction.title()} Shop Item {i}" for i in
+                           range(1, amount + 1)]
 
     return shop_locations
 
 
 def get_shop_slot_lengths(dlcs: List[str]) -> Dict[str, int]:
+    """Return counts of slots for each shop NPC and direction."""
+    dlcs = normalize_dlcs(dlcs)
     slot_lengths = {}
 
-    for npc, npc_data in [("Hephaestus", hephaestus), ("Merlin", merlin)]:
-        total_counts = npc_data["location_amounts"]["base"].copy()
+    heph_totals = apply_dlc_amounts(dlcs, HEPHAESTUS["location_amounts"])
+    merlin_totals = apply_dlc_amounts(dlcs, MERLIN["location_amounts"])
+    dm_totals = apply_dlc_amounts(dlcs, DUNGEON_MASTER["location_amounts"])
 
-        if "Amplified" in dlcs:
-            for key in total_counts:
-                total_counts[key] += npc_data["location_amounts"]["amplified"].get(key, 0)
-
-        if "Synchrony" in dlcs:
-            for key in total_counts:
-                total_counts[key] += npc_data["location_amounts"]["synchrony"].get(key, 0)
-
-        for direction, count in total_counts.items():
-            slot_key = f"{npc} - {direction.title()}"
-            slot_lengths[slot_key] = count
-
-    # Add Dungeon Master (fixed 3-2-3)
-    slot_lengths["Dungeon Master - Left"] = 3
-    slot_lengths["Dungeon Master - Center"] = 2
-    slot_lengths["Dungeon Master - Right"] = 3
+    for direction, amount in heph_totals.items():
+        slot_lengths[f"{HEPHAESTUS['name']} - {direction.title()}"] = amount
+    for direction, amount in merlin_totals.items():
+        slot_lengths[f"{MERLIN['name']} - {direction.title()}"] = amount
+    for direction, amount in dm_totals.items():
+        slot_lengths[f"{DUNGEON_MASTER['name']} - {direction.title()}"] = amount
 
     return slot_lengths
 
 
-def get_shop_locations_numbers(dlcs: List[str]):
-    hephaestus_locations = hephaestus["location_amounts"]["base"].copy()
-    merlin_locations = merlin["location_amounts"]["base"].copy()
-
-    if "Amplified" in dlcs:
-        for key in hephaestus_locations:
-            hephaestus_locations[key] += hephaestus["location_amounts"]["amplified"].get(key, 0)
-            merlin_locations[key] += merlin["location_amounts"]["amplified"].get(key, 0)
-
-    if "Synchrony" in dlcs:
-        for key in hephaestus_locations:
-            hephaestus_locations[key] += hephaestus["location_amounts"]["synchrony"].get(key, 0)
-            merlin_locations[key] += merlin["location_amounts"]["synchrony"].get(key, 0)
-
-    return {
-        "hephaestus_locations": hephaestus_locations,
-        "merlin_locations": merlin_locations,
-        "dungeon_master_locations": {
-            "left": 3,
-            "center": 2,
-            "right": 4
-        }
-    }
-
-
-def get_zone_clear_locations(dlcs: List[str], excluded_chars: List[str] = None) -> Tuple[List[str], List[str]]:
-    zone_clear_locations = []
-    all_zones_clear_locations = []
-
-    characters = zone_clear["location_chars"]["base"].copy()
-    zone_amount = zone_clear["location_zones"]["base"]
-
-    if "Amplified" in dlcs:
-        characters += zone_clear["location_chars"]["amplified"]
-        zone_amount += zone_clear["location_zones"]["amplified"]
-    if "Synchrony" in dlcs:
-        characters += zone_clear["location_chars"]["synchrony"]
-        zone_amount += zone_clear["location_zones"]["synchrony"]
-    if "Miku" in dlcs:
-        characters += zone_clear["location_chars"]["miku"]
-        zone_amount += zone_clear["location_zones"]["miku"]
-
-    if excluded_chars:
-        for char in excluded_chars:
-            characters.remove(char)
-
-    for character in characters:
-        zone_clear_locations += [f"{character} - {zone_clear['location_text']['single_zone']} {zone}" for zone in
-                                 range(1, int(zone_amount) + 1)]
-        all_zones_clear_locations += [f"{character} - {zone_clear['location_text']['all_zones']}"] + [f"{character} - Beat {zone_clear['location_text']['all_zones']}"]
-
-    return zone_clear_locations, all_zones_clear_locations
-
-
-def get_extra_mode_clear_locations(dlcs: List[str], modes: List[str], excluded_chars: List[str] = None) -> List[str]:
-    extra_mode_clear_locations = []
-
-    characters = zone_clear["location_chars"]["base"].copy()
-
-    if "Amplified" in dlcs:
-        characters += zone_clear["location_chars"]["amplified"]
-    if "Synchrony" in dlcs:
-        characters += zone_clear["location_chars"]["synchrony"]
-    if "Miku" in dlcs:
-        characters += zone_clear["location_chars"]["miku"]
-
-    if excluded_chars:
-        for char in excluded_chars:
-            characters.remove(char)
-
-    for character in characters:
-        for mode in modes:
-            extra_mode_clear_locations += [f"{character} - {mode} Mode"]
-
-    return extra_mode_clear_locations
-
+# ==============================
+# All Locations (full list)
+# ==============================
 
 def get_all_locations() -> List[LocationDict]:
-    zone_locations, all_zone_locations = get_zone_clear_locations(["Amplified", "Synchrony", "Miku"])
-    extra_mode_locations = get_extra_mode_clear_locations(["Amplified", "Synchrony", "Miku"], all_game_modes)
-    shop_locations = get_shop_locations(["Amplified", "Synchrony"])
-    return build_location_dicts(shop_locations + zone_locations + all_zone_locations + extra_mode_locations)
+    """Return all possible locations across all DLCs, modes, shops, lobby NPCs."""
+    all_dlcs = DLCS[:]  # ["base", "amplified", "synchrony", "miku"]
+
+    # Zone clears
+    zone_locs, all_zone_locs = get_zone_clear_locations(all_dlcs)
+    event_locs = get_event_locations(all_dlcs)
+    extra_modes = get_extra_mode_clear_locations(all_dlcs, [], EXTRA_MODES["base"] + EXTRA_MODES["amplified"])
+    shops = get_shop_locations(all_dlcs)
+    lobby_npcs = get_lobby_npc_locations()
+
+    return build_location_dicts(shops + zone_locs + all_zone_locs + event_locs + extra_modes + lobby_npcs)
 
 
-def get_available_locations(dlcs: List[str], character_blacklist: List[str] = None, extra_modes: List[str] = None) -> \
-        List[LocationDict]:
-    if extra_modes is None:
-        extra_modes = []
-    zone_locations, all_zone_locations = get_zone_clear_locations(dlcs, character_blacklist)
-    extra_mode_locations = get_extra_mode_clear_locations(dlcs, extra_modes, character_blacklist)
-    shop_locations = get_shop_locations(dlcs)
-
-    raw_locations = shop_locations + zone_locations + all_zone_locations + extra_mode_locations
-    return [all_locations[location_name] for location_name in raw_locations]
-
-
-def get_regions_to_locations(options: CotNDOptions) -> Dict[str, List[LocationDict]]:
-    locations = get_available_locations(options.dlc.value, options.character_blacklist.value,
-                                        options.included_extra_modes.value)
-
-    zone_locations = [loc for loc in locations if "Zone" in loc["name"] or "Mode" in loc["name"]]
-    shop_locations = [loc for loc in locations if "Zone" not in loc["name"] and "Mode" not in loc["name"]]
-
-    return {
-        "Menu": shop_locations,
-        "Crypt": zone_locations,
-    }
+all_locations = {
+    location["name"]: location for location in get_all_locations()
+}
 
 
 def from_id(location_id: int) -> LocationDict:
@@ -265,6 +236,35 @@ def from_id(location_id: int) -> LocationDict:
     return matching[0]
 
 
-all_locations = {
-    location["name"]: location for location in get_all_locations()
-}
+# ==============================
+# Available Locations (per world/options)
+# ==============================
+
+def get_available_locations(
+        dlcs: List[str],
+        blacklist: List[str] | None = None,
+        goals: List[int] | None = None,
+        modes: List[str] | None = None,
+        include_lobby_npcs: bool = True
+) -> List[LocationDict]:
+    """Return only available locations based on params (dlcs, blacklist, modes, lobby NPCs)."""
+    dlcs = normalize_dlcs(dlcs)
+
+    # Zone clears
+    zone_locs, all_zone_locs = get_zone_clear_locations(dlcs, blacklist)
+
+    # Event Locations
+    event_locs = get_event_locations(dlcs, blacklist, goals)
+
+    # Extra modes
+    extra_modes = get_extra_mode_clear_locations(dlcs, blacklist, modes)
+
+    # Shops
+    shops = get_shop_locations(dlcs)
+
+    # Lobby NPCs
+    lobby_npcs = get_lobby_npc_locations() if include_lobby_npcs else []
+
+    names = shops + zone_locs + (all_zone_locs if "All Zones" in goals else []) + event_locs + extra_modes + lobby_npcs
+
+    return [all_locations[location_name] for location_name in names]

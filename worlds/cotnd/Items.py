@@ -116,15 +116,18 @@ def get_default_items(
 def get_filler_items():
     return load_item_csv("ap_items.csv")
 
+def get_all_npc_items():
+    items = load_item_csv("lobby_npcs.csv")
+    return [item for item in items]
 
-def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: List[str]):
+def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: List[str], npc_items: bool):
     # Base item list with all items
-    filtered_items = load_item_csv() + load_item_csv("game_modes.csv")
+    filtered_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("lobby_npcs.csv")
 
     # Remove blacklisted characters from item list
     filtered_items = list(
         filter(
-            lambda item: cotnd_id_to_char(item["cotnd_id"]) not in character_blacklist,
+            lambda item: item["name"] not in character_blacklist,
             filtered_items
         )
     )
@@ -148,6 +151,14 @@ def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: L
         )
     )
 
+    # Remove lobby npcs from run if items not included in options
+    if not npc_items:
+        filtered_items = list(
+            filter(
+                lambda item: item["type"] != "NPC", filtered_items
+            )
+        )
+
     # Remove default items
     filtered_items = list(
         filter(lambda item: item["type"] == "Character" or item["isDefault"] == False, filtered_items)
@@ -157,7 +168,8 @@ def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: L
 
 
 def get_all_items():
-    raw_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("ap_items.csv")
+    raw_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("lobby_npcs.csv") + load_item_csv(
+        "ap_items.csv")
 
     for index, item in enumerate(raw_items):
         item["code"] = base_code + index

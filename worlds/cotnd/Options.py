@@ -39,6 +39,37 @@ all_game_modes = [
     "Low Percent"
 ]
 
+class Goal(Choice):
+    """What goal to set for the Crypt of the NecroDancer multiworld.
+    All_Zones: Clear ALl Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear".
+    Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks.
+    """
+    display_name = "Goal"
+    option_All_Zones = 0
+    option_Zones = 1
+    default = 0
+
+
+class AllZonesGoalClear(Range):
+    """Determines how many character completions are required for the All Zones goal. Default is 6.
+    Note: If this value exceeds the number of characters in the pool, then this value will equal that number."""
+
+    display_name = "Characters Required for All Zones Goal"
+    range_start = 1
+    range_end = 19
+    default = 6
+
+
+class ZonesGoalClear(Range):
+    """Determines how many separate zone completions are required for the Zones goal. Default is 30.
+    Note: If this value exceeds the number of zones in the pool, then this value will equal that number."""
+
+    display_name = "Amount required for Zones Goal"
+    range_start = 1
+    range_end = 95
+    default = 30
+
+
 class DLC(OptionList):
     """Which DLCs to include content from in progression and checks.
     Options include: Amplified, Synchrony, Miku
@@ -51,13 +82,13 @@ class DLC(OptionList):
 
 
 class StartingCharactersAmount(Range):
-    """How many characters to start the game with. Minimum is 1, maximum is 19. Default is 3.
+    """How many characters to start the game with. Minimum is 1, maximum is 19. Default is 2.
     Note: If this value exceeds the number of characters in the pool, then this value will equal that number."""
 
     display_name = "Starting Characters Amount"
     range_start = 1
     range_end = 19
-    default = 3
+    default = 2
 
 
 class CharacterBlacklist(OptionList):
@@ -68,16 +99,6 @@ class CharacterBlacklist(OptionList):
     display_name = "Character Blacklist"
     valid_keys = frozenset(all_chars)
     default = ["Coda"]
-
-
-class AllZonesGoalClear(Range):
-    """Determines how many character completions are required for the All Zones goal. Default is 6.
-    Note: If this value exceeds the number of characters in the pool, then this value will equal that number."""
-
-    display_name = "Characters Required for All Zones"
-    range_start = 1
-    range_end = 19
-    default = 6
 
 
 class IncludedExtraModes(OptionList):
@@ -190,11 +211,15 @@ class ProgressionPriceMax(Range):
 
 @dataclass
 class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
+    goal: Goal
+    all_zones_goal_clear: AllZonesGoalClear
+    zones_goal_clear: ZonesGoalClear
     dlc: DLC
     starting_characters_amount: StartingCharactersAmount
     character_blacklist: CharacterBlacklist
-    all_zones_goal_clear: AllZonesGoalClear
     included_extra_modes: IncludedExtraModes
+    locked_lobby_npcs: LockedLobbyNPCs
+    lobby_npc_items: LobbyNPCItems
     price_randomization: PriceRandomization
     randomized_price_min: RandomizedPriceMin
     randomized_price_max: RandomizedPriceMax
@@ -206,6 +231,11 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     progression_price_max: ProgressionPriceMax
 
 option_groups = [
+    OptionGroup("Goal Options", [
+        Goal,
+        AllZonesGoalClear,
+        ZonesGoalClear,
+    ]),
     OptionGroup("Pricing Options", [
         PriceRandomization,
         RandomizedPriceMin,

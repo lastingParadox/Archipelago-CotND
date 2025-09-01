@@ -84,15 +84,21 @@ class CotNDContext(CommonContext):
 
     def on_cotnd_connect_to_ap(self):
         """When the client connects to both CotND and AP"""
+
+        goal, goal_required = ("All Zones", self.slotdata.get("all_zones_goal_clear")) if self.slotdata.get(
+            "goal") == 0 else ("Zones", self.slotdata.get("zones_goal_clear"))
+
         print("Sending randomizer data to CotND")
         self.cotnd_handler.enqueue({
             "datatype": "State",
             "connected": True,
-            "goal": self.slotdata.get("all_zones_goal_clear"),
+            "goal": goal,
+            "goal_required": goal_required,
             "deathlink": "DeathLink" in self.tags,
             "extra_modes": self.slotdata.get("included_extra_modes"),
             "dlc": self.slotdata.get("dlc"),
             "character_blacklist": self.slotdata.get("character_blacklist"),
+            "caged_npc_locations": self.slotdata.get("caged_npc_locations"),
             "pricing": {
                 "type": self.slotdata.get("price_randomization"),
                 "general_price_range": {
@@ -273,6 +279,12 @@ class CotNDContext(CommonContext):
                     }])
             elif eventtype == "Victory":
                 await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+            elif eventtype == "Disconnected":
+                # Handle mod disconnect but keep AP connection alive
+                logger.info("Received Disconnected event from CotND Mod.")
+                self.cotnd_handler.remove_lock()
+                self.cotnd_handler.connected = False
+                self.connected_to_ap = False
 
         except Exception as e:
             logger.error(f"Manage event error ({eventtype}): {e}")
@@ -397,7 +409,7 @@ class CotNDHandler:
         try:
             datatype: str = data.get("datatype")
 
-            if datatype in {"Chat", "Join", "Leave", "Death", "Connect", "Disconnect", "DeathLink"}:
+            if datatype in {"Chat", "Join", "Leave", "Death", "Connect", "Disconnected", "DeathLink"}:
                 # Instant event
                 await self.ctx.manage_event(data)
 
