@@ -1,5 +1,6 @@
 import csv
 from collections import defaultdict
+from copy import deepcopy
 from importlib.resources import files
 from typing import List, TypedDict
 
@@ -30,6 +31,7 @@ PLURALS = {
     "Shovel": "Shovels",
     "Ring": "Rings",
     "Character": "Characters",
+    "Upgrade": "Upgrades",
     "Mode": "Modes",
 }
 
@@ -123,6 +125,13 @@ def get_all_npc_items():
 def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: List[str], npc_items: bool):
     # Base item list with all items
     filtered_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("lobby_npcs.csv")
+
+    # Add two extra Permanent Health Upgrade entries
+    for item in filtered_items:
+        if item["name"] == "Permanent Health Upgrade":
+            filtered_items.append(deepcopy(item))
+            filtered_items.append(deepcopy(item))
+            break
 
     # Remove blacklisted characters from item list
     filtered_items = list(

@@ -48,6 +48,8 @@ class CotNDContext(CommonContext):
     cotnd_handler = None
     connected_to_ap = False
     death_link_enabled = False
+    disconnect_reason: str | None = None
+    last_received_index = 0
     _eventqueue: List[Dict] = []
 
     def __init__(self, server_address, password):
@@ -167,16 +169,24 @@ class CotNDContext(CommonContext):
                     async_start(cotnd_connect_hint())
 
             elif cmd == "ReceivedItems":
-                items = [
-                    {"item": item_from_id(netitem.item)["cotnd_id"], "item_name": item_from_id(netitem.item)["name"],
-                     "location_code": str(netitem.location), "playername": self.player_names[netitem.player]} for
-                    netitem in
-                    args["items"]]
+                new_items = self.items_received[self.last_received_index:]
+                indexed_items = []
+                for idx, netitem in enumerate(new_items, start=self.last_received_index):
+                    indexed_items.append({
+                        "item": item_from_id(netitem.item)["cotnd_id"],
+                        "item_name": item_from_id(netitem.item)["name"],
+                        "location_code": str(netitem.location),
+                        "playername": self.player_names[netitem.player],
+                        "ap_index": idx
+                    })
+
+                self.last_received_index = len(self.items_received)
                 self.cotnd_handler.enqueue({
                     "datatype": "Items",
-                    "items": items,
+                    "items": indexed_items,
                     "resync": True if self.resync_items else None,
                 })
+
                 self.resync_items = False
 
             elif cmd == "RoomUpdate":
@@ -281,10 +291,9 @@ class CotNDContext(CommonContext):
                 await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
             elif eventtype == "Disconnected":
                 # Handle mod disconnect but keep AP connection alive
-                logger.info("Received Disconnected event from CotND Mod.")
+                self.disconnect_reason = "mod disconnected"
                 self.cotnd_handler.remove_lock()
                 self.cotnd_handler.connected = False
-                self.connected_to_ap = False
 
         except Exception as e:
             logger.error(f"Manage event error ({eventtype}): {e}")
@@ -323,7 +332,7 @@ class CotNDHandler:
         self.ctx = ctx
         self._connected = False
         self.last_mod_message_time = time.time()
-        self.disconnect_timeout = 10  # seconds
+        self.disconnect_timeout = 15  # seconds
         self.base_dir = self.get_data_folder_path()
         self.lock_file = os.path.join(self.base_dir, "connection.lock")
         self._last_mod_ts = 0
@@ -401,8 +410,8 @@ class CotNDHandler:
                             "datatype": datatype,
                             "id": scout_id
                         })
-            elif datatype == "Bounce":
-                self.outgoing_data_dirty = True
+            elif datatype == "Disconnected":
+                await self.handle_cotnd_filedata_entry({ "datatype": datatype })
 
     async def handle_cotnd_filedata_entry(self, data: Dict[str, Any]):
         """Sends data over to CotNDContext for event handling."""
@@ -513,15 +522,17 @@ class CotNDHandler:
 
                     await self.handle_io()
                     self.connected = False
-                    logger.info(f"Disconnected from Crypt of the NecroDancer (timed out)")
+                    reason = self.ctx.disconnect_reason or "timed out"
+                    logger.info(f"Disconnected from Crypt of the NecroDancer ({reason})")
+                    self.ctx.disconnect_reason = None
                     await asyncio.sleep(3.0)
             except Exception as e:
                 logger.error(f"CotND file reader error: {e}")
             finally:
                 self.connected = False
                 self.remove_lock()
-            print("Restarting connection loop in 5 seconds.")
-            await asyncio.sleep(5.0)
+            print("Restarting connection loop in 3 seconds.")
+            await asyncio.sleep(3.0)
 
     async def handle_io(self):
         while not self.ctx.seed_name or not self.ctx.slot or not self.ctx.connected_to_ap:
@@ -557,12 +568,14 @@ class CotNDHandler:
                 if incoming_data:
                     await self.handle_incoming_filedata(incoming_data)
                 else:
-                    break
+                    print("Data not received from mod!", time.time())
 
-                if time.time() - self.last_mod_message_time > self.disconnect_timeout:
-                    logger.warning(
-                        f"No response from Crypt of the NecroDancer for over {self.disconnect_timeout} seconds. Disconnecting.")
-                    break  # This will exit handle_io and trigger reconnection
+                if self.ctx.disconnect_reason:
+                    break
+                elif time.time() - self.last_mod_message_time > self.disconnect_timeout:
+                    print(f"No response from Crypt of the NecroDancer for over {self.disconnect_timeout} seconds. Disconnecting.")
+                    self.ctx.disconnect_reason = f"{self.disconnect_timeout} second time out"
+                    break
             except Exception as e:
                 logger.error(f"CotND Handle IO Error: {e}")
                 raise
