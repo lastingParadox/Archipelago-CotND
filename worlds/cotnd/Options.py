@@ -41,8 +41,8 @@ all_game_modes = [
 
 class Goal(Choice):
     """What goal to set for the Crypt of the NecroDancer multiworld.
-    All_Zones: Clear ALl Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear".
-    Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks.
+    All_Zones: Clear ALl Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear". Recommended for experienced players, as this can be challenging.
+    Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks. Recommended for a quicker and less challenging experience.
     """
     display_name = "Goal"
     option_All_Zones = 0
