@@ -569,7 +569,6 @@ class CotNDHandler:
                     await self.handle_incoming_filedata(incoming_data)
                 else:
                     print("Data not received from mod!", time.time())
-
                 if self.ctx.disconnect_reason:
                     break
                 elif time.time() - self.last_mod_message_time > self.disconnect_timeout:

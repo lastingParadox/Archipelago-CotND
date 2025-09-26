@@ -2,6 +2,7 @@ import csv
 from collections import defaultdict
 from copy import deepcopy
 from importlib.resources import files
+from random import choices
 from typing import List, TypedDict
 
 from BaseClasses import Item, ItemClassification
@@ -87,6 +88,7 @@ def load_item_csv(file_path: str = "items.csv") -> List[ItemDict]:
                 "Progression": ItemClassification.progression,
                 "Useful": ItemClassification.useful,
                 "Filler": ItemClassification.filler,
+                "Trap": ItemClassification.trap
             }.get(row["Item Classification"], ItemClassification.useful)
 
             item: ItemDict = {
@@ -115,14 +117,56 @@ def get_default_items(
     ]
 
 
-def get_filler_items():
-    return load_item_csv("ap_items.csv")
+def get_filler_items(world, quantity: int) -> list[ItemDict]:
+    if quantity <= 0: return []
+
+    filler_list = load_item_csv("filler_items.csv")
+    non_trap_list: list[ItemDict] = list(filter(lambda item: item["type"] != "Trap", filler_list))
+    trap_list: list[ItemDict] = list(filter(lambda item: item["type"] == "Trap", filler_list))
+
+    trap_percentage = world.options.trap_percentage.value / 100
+    trap_options = world.options.trap_weights.value
+
+    if not sum(trap_options.values()):
+        trap_percentage = 0
+
+    filler_percentage = 1 - trap_percentage
+
+    normal_weights = {
+        item["name"]: 1.0 for item in non_trap_list
+    }
+    if normal_weights:
+        scale = filler_percentage / sum(normal_weights.values())
+        normal_weights = {name: value * scale for name, value in normal_weights.items()}
+
+    trap_weights = {}
+    if trap_percentage > 0 and trap_list:
+        scale = trap_percentage / sum(trap_options.values())
+        trap_weights = {name: value * scale for name, value in trap_options.items()}
+
+    combined = {**normal_weights, **trap_weights}
+
+    # Map names back to their full ItemDict
+    name_to_item = {item["name"]: item for item in filler_list}
+
+    # Convert to parallel lists for random.choices
+    names   = list(combined.keys())
+    weights = list(combined.values())
+
+    # Draw `quantity` items with replacement using the weighted distribution
+    chosen_names = choices(names, weights=weights, k=quantity)
+
+    # Return full ItemDicts (duplicates allowed)
+    return [name_to_item[name] for name in chosen_names]
+
 
 def get_all_npc_items():
     items = load_item_csv("lobby_npcs.csv")
     return [item for item in items]
 
-def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: List[str], npc_items: bool):
+
+def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: List[str], npc_items: bool) -> list[
+    ItemDict]:
     # Base item list with all items
     filtered_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("lobby_npcs.csv")
 
@@ -178,7 +222,7 @@ def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: L
 
 def get_all_items():
     raw_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("lobby_npcs.csv") + load_item_csv(
-        "ap_items.csv")
+        "filler_items.csv")
 
     for index, item in enumerate(raw_items):
         item["code"] = base_code + index

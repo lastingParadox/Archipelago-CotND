@@ -194,7 +194,6 @@ class CotNDWorld(World):
             )
 
     def create_items(self) -> None:
-        filler_items = get_filler_items()
 
         # Create victory event pairs
         for character in self.chars:
@@ -213,9 +212,11 @@ class CotNDWorld(World):
                 self.get_location(f"Caged {npc}").place_locked_item(self.create_item(npc))
 
         unfilled_locations = len(self.multiworld.get_unfilled_locations(self.player))
+        needed_filler = unfilled_locations - len(self.items)
 
-        while len(self.items) < unfilled_locations:
-            self.items.append(self.random.choice(filler_items))
+        filler_items = get_filler_items(self, needed_filler)
+
+        self.items.extend(filler_items)
 
         for item in self.items:
             self.multiworld.itempool.append(self.create_item(item['name']))
