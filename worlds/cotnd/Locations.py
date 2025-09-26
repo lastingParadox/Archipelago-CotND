@@ -265,6 +265,6 @@ def get_available_locations(
     # Lobby NPCs
     lobby_npcs = get_lobby_npc_locations() if include_lobby_npcs else []
 
-    names = shops + zone_locs + (all_zone_locs if "All Zones" in goals else []) + event_locs + extra_modes + lobby_npcs
+    names = shops + zone_locs + (all_zone_locs if 0 in goals else []) + event_locs + extra_modes + lobby_npcs
 
     return [all_locations[location_name] for location_name in names]

@@ -3,7 +3,7 @@ from Options import (
     DeathLinkMixin,
     PerGameCommonOptions,
     Range,
-    OptionList, Choice, OptionGroup, DefaultOnToggle, Toggle,
+    OptionList, Choice, OptionGroup, DefaultOnToggle, Toggle, OptionCounter,
 )
 
 all_chars = [
@@ -136,6 +136,40 @@ class PriceRandomization(Choice):
     option_Complete = 3
     default = 0
 
+class TrapPercentage(Range):
+    """
+    Replaces filler items with traps, at the specified rate.
+    """
+    display_name = "Trap Percentage"
+    range_start = 0
+    range_end = 100
+    default = 20
+
+_default_trap_weights = {
+    "Camera Trap": 2,
+    "Confusion Trap": 7,
+    "Dad Trap": 2,
+    "Dead Ringer Trap": 1,
+    "Gold Scatter Trap": 6,
+    "Haunted Shopkeeper Trap": 4,
+    "Monkey Trap": 10,
+    "No Return Trap": 3,
+    "Skeleton Trap": 5,
+    "Tempo Trap": 7
+}
+
+class TrapWeights(OptionCounter):
+    """
+    Specify the weights determining how many copies of each trap item will be in your itempool.
+    If you don't want a specific type of trap, you can set the weight for it to 0.
+    If you set all trap weights to 0, you will get no traps, bypassing the "Trap Percentage" option.
+    """
+    display_name = "Trap Weights"
+    valid_keys = _default_trap_weights.keys()
+
+    min = 0
+
+    default = _default_trap_weights
 
 class RandomizedPriceMin(Range):
     """Determines the minimum diamond price range for items in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla_Rand or Complete."""
@@ -220,6 +254,8 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     included_extra_modes: IncludedExtraModes
     locked_lobby_npcs: LockedLobbyNPCs
     lobby_npc_items: LobbyNPCItems
+    trap_percentage: TrapPercentage
+    trap_weights: TrapWeights
     price_randomization: PriceRandomization
     randomized_price_min: RandomizedPriceMin
     randomized_price_max: RandomizedPriceMax
@@ -235,6 +271,10 @@ option_groups = [
         Goal,
         AllZonesGoalClear,
         ZonesGoalClear,
+    ]),
+    OptionGroup("Trap Options", [
+        TrapPercentage,
+        TrapWeights
     ]),
     OptionGroup("Pricing Options", [
         PriceRandomization,
