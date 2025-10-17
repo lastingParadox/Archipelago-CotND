@@ -70,6 +70,15 @@ class ZonesGoalClear(Range):
     default = 30
 
 
+class PerLevelZoneClears(DefaultOnToggle):
+    """Determines whether zone clear checks are split per level (e.g., 1-1, 1-2, 1-3, Boss)
+    instead of just a single 'Zone X' check. Default is false.
+
+    Special final boss cases apply for certain characters (Cadence, Melody, Aria, Nocturna)."""
+
+    display_name = "Per-Level Zone Clears"
+
+
 class DLC(OptionList):
     """Which DLCs to include content from in progression and checks.
     Options include: Amplified, Synchrony, Miku
@@ -248,6 +257,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     goal: Goal
     all_zones_goal_clear: AllZonesGoalClear
     zones_goal_clear: ZonesGoalClear
+    per_level_zone_clears: PerLevelZoneClears
     dlc: DLC
     starting_characters_amount: StartingCharactersAmount
     character_blacklist: CharacterBlacklist
@@ -271,6 +281,7 @@ option_groups = [
         Goal,
         AllZonesGoalClear,
         ZonesGoalClear,
+        PerLevelZoneClears
     ]),
     OptionGroup("Trap Options", [
         TrapPercentage,

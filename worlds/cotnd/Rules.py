@@ -17,24 +17,22 @@ def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], sl
 
         npc, slot, index_str = match.groups()
         index = int(index_str)
-        slot_key = f"{npc} - {slot}"
-        total_in_slot = slot_lengths.get(slot_key, 1)
 
         loc = world.get_location(location, player)
 
+        # Shared global unlock count:
+        # Item 1 requires 1 Shop Stock Unlock,
+        # Item 2 requires 2 Shop Stock Unlocks, etc.
+
         if index == 1:
-            set_rule(loc, lambda state: True)
+            # First row is free
             continue
-
-        depth_ratio = index / total_in_slot
-        required_chars = max(1, int(depth_ratio * min(len(chars), 6)))  # Adjust 6 for pacing at most
-
-        set_rule(
-            loc,
-            lambda state, req=required_chars: sum(
-                1 for c in chars if state.has(c, player)
-            ) >= req
-        )
+        else:
+            # Row N requires (N-1) unlocks
+            set_rule(
+                loc,
+                lambda state, req=(index - 1): state.has("Shop Stock Unlock", player, req)
+            )
 
 def set_rules(world: MultiWorld, player: int, locations: List[str], available_chars: List[str], dlcs: List[str],
               goal_clear_req: int, locked_lobby_npcs: bool):
@@ -90,6 +88,11 @@ def set_rules(world: MultiWorld, player: int, locations: List[str], available_ch
 
         for location in merlin_locations:
             add_rule(world.get_location(location, player), lambda state: state.has("Merlin", player))
+
+        codex_locations = ["Dragon Lore", "Trap Lore", "Bomb Lore", "How to Get Away with Murder"]
+
+        for location in codex_locations:
+            add_rule(world.get_location(location, player), lambda state: state.has("Codex", player))
 
     world.completion_condition[player] = (
         lambda state: state.has("Complete", player, goal_clear_req)

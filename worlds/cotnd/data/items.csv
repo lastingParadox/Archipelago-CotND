@@ -181,4 +181,5 @@ Map,Useful,Misc,MiscMap,Base,True
 Compass,Useful,Misc,MiscCompass,Base,True
 Coupon,Useful,Misc,MiscCoupon,Base,True
 Monkey's Paw,Useful,Misc,MiscMonkeyPaw,Amplified,True
-Permanent Health Upgrade,Useful,Upgrade,PermHeart2,Base,False
+Permanent Health Upgrade,Progression,Upgrade,PermHeart2,Base,False
+Shop Stock Unlock,Progression,Upgrade,APShopStock,Base,False

@@ -3,7 +3,7 @@ from BaseClasses import Location
 from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars
 
 base_code = 742_080
-shop_location_range = {"start": 742_080, "end": 742_182}
+shop_location_range = {"start": 742_080, "end": 742_186}
 
 
 class CotNDLocation(Location):
@@ -91,12 +91,54 @@ def build_location_dicts(zone_locations: List[str]) -> List[LocationDict]:
 # Zone Clear Locations
 # ==============================
 
-def get_zone_clear_locations(dlcs: List[str], blacklist: List[str] | None = None) -> tuple[list[str], list[str]]:
-    """Return (zone_clear, all_zone_clear) locations."""
+def get_zone_clear_locations(dlcs: List[str], blacklist: List[str] | None = None, per_level = True) -> tuple[list[str], list[str]]:
+    """Return (zone_clear, all_zone_clear) locations.
+
+        If per_level is True, expands each zone into individual levels (1-1, 1-2, 1-3, Boss).
+        Otherwise, just uses "Zone X".
+        Handles special boss cases for specific characters.
+        """
     dlcs = normalize_dlcs(dlcs)
     chars = get_characters_for_dlcs(dlcs, blacklist)
+    amplified = "amplified" in dlcs
 
-    zone_locations = [f"{char} - Zone {zone}" for char in chars for zone in range(1, 6 if "amplified" in dlcs else 5)]
+    zone_locations: list[str] = []
+
+    for char in chars:
+        if per_level:
+            for zone in range(1, (6 if amplified else 5)):
+                # Add standard levels
+                zone_locations.extend([f"{char} - Zone {zone} - Floor {level}" for level in range(1, 4)])
+
+                # Handle boss
+                boss_label = f"Zone {zone} - Boss"
+                if char == "Dove":
+                    # Dove has no final boss
+                    continue
+                if zone == (4 if not amplified else 5):
+                    # Final boss zone → handle special cases
+                    if char == "Cadence":
+                        zone_locations.append(f"{char} - Dead Ringer")
+                        zone_locations.append(f"{char} - NecroDancer")
+                        continue
+                    elif char == "Melody":
+                        zone_locations.append(f"{char} - NecroDancer")
+                        continue
+                    elif char == "Nocturna":
+                        zone_locations.append(f"{char} - Frankensteinway")
+                        zone_locations.append(f"{char} - The Conductor")
+                        continue
+                elif zone == 1 and char == "Aria":
+                    zone_locations.append(f"{char} - Golden Lute")
+                    continue
+                # Default boss
+                zone_locations.append(f"{char} - {boss_label}")
+        else:
+            # Simple Zone X clear
+            for zone in range(1, (6 if amplified else 5)):
+                zone_locations.append(f"{char} - Zone {zone}")
+
+    # Add All Zones clears
     all_zone_locations = [f"{char} - All Zones" for char in chars]
 
     return zone_locations, all_zone_locations
@@ -155,55 +197,73 @@ def get_extra_mode_clear_locations(dlcs: List[str], blacklist: List[str] | None 
 # Lobby NPC Locations
 # ==============================
 
-LOBBY_NPCS = ["Beastmaster", "Merlin", "Bossmaster", "Weaponmaster", "Diamond Dealer"]
+LOBBY_NPCS = ["Codex", "Merlin", "Hintmaster", "Janitor", "Diamond Dealer"]
 
 
 def get_lobby_npc_locations():
-    return [f"Caged {npc}" for npc in LOBBY_NPCS]
+    codex_locs = ["Dragon Lore", "Trap Lore", "Bomb Lore", "How to Get Away with Murder"]
+    caged_list = [f"Caged {npc}" for npc in LOBBY_NPCS]
+
+    return codex_locs + caged_list
 
 
 # ==============================
 # Shop Locations
 # ==============================
 
-def get_shop_locations(dlcs: List[str]) -> List[str]:
-    """Return all shop location names based on DLCs."""
+def _get_normalized_distribution(dlcs: List[str]) -> Dict[str, int]:
+    """Compute normalized slot distribution across all shopkeepers and directions (9 total slots),
+       rotating extra slots across shopkeepers. Priority per shopkeeper: center > left > right."""
+
     dlcs = normalize_dlcs(dlcs)
+    shopkeepers = [HEPHAESTUS, MERLIN, DUNGEON_MASTER]
+
+    # Apply DLC totals
+    totals = {s["name"]: apply_dlc_amounts(dlcs, s["location_amounts"]) for s in shopkeepers}
+
+    # Total across ALL shopkeepers
+    grand_total = sum(sum(slots.values()) for slots in totals.values())
+
+    # Normalize across 9 slots (3 shopkeepers × 3 directions)
+    base = grand_total // 9
+    remainder = grand_total % 9
+
+    # Start with everyone getting base
+    distribution = {f"{s['name']} - {d}": base for s in shopkeepers for d in ["center", "left", "right"]}
+
+    # Build rotated priority order: center first for each shopkeeper in rotation, then left, then right
+    directions = ["center", "left", "right"]
+    priority_order = []
+
+    # For each direction, rotate shopkeepers
+    for direction in directions:
+        for i in range(len(shopkeepers)):
+            shopkeeper = shopkeepers[i % len(shopkeepers)]["name"]
+            priority_order.append(f"{shopkeeper} - {direction}")
+
+    # Hand out leftover slots in rotated order
+    for i in range(remainder):
+        distribution[priority_order[i % len(priority_order)]] += 1
+
+    return distribution
+
+
+def get_shop_locations(dlcs: List[str]) -> List[str]:
+    """Return all shop location names with normalized slot distribution."""
+    distribution = _get_normalized_distribution(dlcs)
+
     shop_locations = []
-
-    heph_totals = apply_dlc_amounts(dlcs, HEPHAESTUS["location_amounts"])
-    merlin_totals = apply_dlc_amounts(dlcs, MERLIN["location_amounts"])
-    dm_totals = apply_dlc_amounts(dlcs, DUNGEON_MASTER["location_amounts"])
-
-    for direction, amount in heph_totals.items():
-        shop_locations += [f"{HEPHAESTUS['name']} - {direction.title()} Shop Item {i}" for i in range(1, amount + 1)]
-    for direction, amount in merlin_totals.items():
-        shop_locations += [f"{MERLIN['name']} - {direction.title()} Shop Item {i}" for i in range(1, amount + 1)]
-    for direction, amount in dm_totals.items():
-        shop_locations += [f"{DUNGEON_MASTER['name']} - {direction.title()} Shop Item {i}" for i in
-                           range(1, amount + 1)]
+    for slot_key, count in distribution.items():
+        shopkeeper, direction = slot_key.split(" - ")
+        for i in range(1, count + 1):
+            shop_locations.append(f"{shopkeeper} - {direction.title()} Shop Item {i}")
 
     return shop_locations
 
 
 def get_shop_slot_lengths(dlcs: List[str]) -> Dict[str, int]:
-    """Return counts of slots for each shop NPC and direction."""
-    dlcs = normalize_dlcs(dlcs)
-    slot_lengths = {}
-
-    heph_totals = apply_dlc_amounts(dlcs, HEPHAESTUS["location_amounts"])
-    merlin_totals = apply_dlc_amounts(dlcs, MERLIN["location_amounts"])
-    dm_totals = apply_dlc_amounts(dlcs, DUNGEON_MASTER["location_amounts"])
-
-    for direction, amount in heph_totals.items():
-        slot_lengths[f"{HEPHAESTUS['name']} - {direction.title()}"] = amount
-    for direction, amount in merlin_totals.items():
-        slot_lengths[f"{MERLIN['name']} - {direction.title()}"] = amount
-    for direction, amount in dm_totals.items():
-        slot_lengths[f"{DUNGEON_MASTER['name']} - {direction.title()}"] = amount
-
-    return slot_lengths
-
+    """Return normalized slot counts for each shop NPC and direction."""
+    return _get_normalized_distribution(dlcs)
 
 # ==============================
 # All Locations (full list)
@@ -220,7 +280,7 @@ def get_all_locations() -> List[LocationDict]:
     shops = get_shop_locations(all_dlcs)
     lobby_npcs = get_lobby_npc_locations()
 
-    return build_location_dicts(shops + zone_locs + all_zone_locs + event_locs + extra_modes + lobby_npcs)
+    return build_location_dicts(shops + lobby_npcs + zone_locs + all_zone_locs + event_locs + extra_modes)
 
 
 all_locations = {
@@ -245,13 +305,14 @@ def get_available_locations(
         blacklist: List[str] | None = None,
         goals: List[int] | None = None,
         modes: List[str] | None = None,
-        include_lobby_npcs: bool = True
+        include_lobby_npcs: bool = True,
+        per_level: bool = True,
 ) -> List[LocationDict]:
     """Return only available locations based on params (dlcs, blacklist, modes, lobby NPCs)."""
     dlcs = normalize_dlcs(dlcs)
 
     # Zone clears
-    zone_locs, all_zone_locs = get_zone_clear_locations(dlcs, blacklist)
+    zone_locs, all_zone_locs = get_zone_clear_locations(dlcs, blacklist, per_level)
 
     # Event Locations
     event_locs = get_event_locations(dlcs, blacklist, goals)
@@ -265,6 +326,6 @@ def get_available_locations(
     # Lobby NPCs
     lobby_npcs = get_lobby_npc_locations() if include_lobby_npcs else []
 
-    names = shops + zone_locs + (all_zone_locs if 0 in goals else []) + event_locs + extra_modes + lobby_npcs
+    names = shops + lobby_npcs + zone_locs + (all_zone_locs if 0 in goals else []) + event_locs + extra_modes
 
     return [all_locations[location_name] for location_name in names]

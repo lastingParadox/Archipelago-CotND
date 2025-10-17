@@ -38,7 +38,7 @@ PLURALS = {
 
 
 class CotNDItem(Item):
-    name: str = "Crypt of the NecroDancer"
+    game: str = "Crypt of the NecroDancer"
 
 
 class ItemDict(TypedDict):
@@ -114,6 +114,7 @@ def get_default_items(
         if item["isDefault"] == True
            and not item["type"] == "Character"
            and (item["dlc"] == "Base" or item["dlc"] in dlc)
+           and not (item["name"] == "Ring of Phasing" and "Amplified" in dlc)
     ]
 
 
@@ -171,11 +172,14 @@ def get_items_list(character_blacklist: List[str], dlc: List[str], game_modes: L
     filtered_items = load_item_csv() + load_item_csv("game_modes.csv") + load_item_csv("lobby_npcs.csv")
 
     # Add two extra Permanent Health Upgrade entries
-    for item in filtered_items:
+    # Also remove Ring of Phasing if Amplified is enabled
+
+    for item in filtered_items[:]:
         if item["name"] == "Permanent Health Upgrade":
             filtered_items.append(deepcopy(item))
             filtered_items.append(deepcopy(item))
-            break
+        elif item["name"] == "Ring of Phasing" and "Amplified" in dlc:
+            filtered_items.remove(item)
 
     # Remove blacklisted characters from item list
     filtered_items = list(
@@ -229,6 +233,18 @@ def get_all_items():
 
     return raw_items
 
+def get_shop_stock_unlocks(min_slot_rows: int) -> list[ItemDict]:
+    """Generate Shop Stock Unlock items based on minimum slot rows."""
+    items = []
+    if "Shop Stock Unlock" not in all_items:
+        return items
+
+    base_item = all_items["Shop Stock Unlock"]
+
+    for _ in range(min_slot_rows - 1):
+        items.append(deepcopy(base_item))
+
+    return items
 
 def from_id(item_id: int) -> ItemDict:
     matching = [item for item in all_items.values() if item['code'] == item_id]
@@ -236,6 +252,13 @@ def from_id(item_id: int) -> ItemDict:
         raise ValueError(f"No item data for item id '{item_id}'")
     assert len(matching) < 2, f"Multiple item data with id '{item_id}. Please report."
     return matching[0]
+
+
+def name_to_id(item_name: str) -> int:
+    matching = [item for item in all_items.values() if item['name'] == item_name]
+    if len(matching) == 0:
+        raise ValueError(f"No item data for item name '{item_name}'")
+    return matching[0]["code"]
 
 
 def pluralize(word: str) -> str:

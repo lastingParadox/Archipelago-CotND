@@ -1,6 +1,6 @@
 Display Name,Item Classification,Type,Necrodancer ID,DLC,Default
-Beastmaster,Useful,NPC,Beastmaster,Base,False
+Codex,Progression,NPC,Codex,Base,False
 Merlin,Progression,NPC,Merlin,Base,False
-Bossmaster,Useful,NPC,Bossmaster,Base,False
-Weaponmaster,Useful,NPC,Weaponmaster,Base,False
-Diamond Dealer,Useful,NPC,Diamonddealer,Base,False
+Hintmaster,Progression,NPC,Bossmaster,Base,False
+Janitor,Progression,NPC,Janitor,Base,False
+Diamond Dealer,Progression,NPC,Diamonddealer,Base,False
