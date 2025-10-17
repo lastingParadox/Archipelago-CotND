@@ -8,11 +8,11 @@ from .Items import (
     get_items_list,
     all_items,
     ItemDict,
-    CotNDItem, get_default_items, get_filler_items, item_name_groups,
+    CotNDItem, get_default_items, get_filler_items, item_name_groups, from_id, get_shop_stock_unlocks,
 )
 from .Locations import (
     CotNDLocation,
-    get_available_locations, all_locations, LOBBY_NPCS,
+    get_available_locations, all_locations, LOBBY_NPCS, get_shop_slot_lengths,
 )
 from .Options import CotNDOptions
 from .Regions import cotnd_regions, get_regions_to_locations
@@ -67,6 +67,7 @@ class CotNDWorld(World):
     item_name_to_id = {item['name']: item['code'] for item in all_items.values()}
     location_name_to_id = {location['name']: location['code'] for location in all_locations.values()}
     item_name_groups = item_name_groups
+    location_hint_codes = {}
     topology_present = True
 
     dlcs = []
@@ -137,8 +138,17 @@ class CotNDWorld(World):
             blacklist,
             [self.options.goal.value],
             self.options.included_extra_modes.value,
-            bool(self.options.locked_lobby_npcs.value)
+            bool(self.options.locked_lobby_npcs.value),
+            bool(self.options.per_level_zone_clears.value)
         )
+
+        # Logic for adding more shop unlocks based on shop locations available
+        # This should probably be moved
+        slot_lengths = get_shop_slot_lengths(self.options.dlc.value)
+        min_slot_rows = min(slot_lengths.values()) if slot_lengths else 0
+
+        unlocks = get_shop_stock_unlocks(min_slot_rows)
+        self.items.extend(unlocks)
 
         # Available characters
         self.chars = get_available_characters(self.items, self.dlcs, blacklist)
@@ -194,7 +204,6 @@ class CotNDWorld(World):
             )
 
     def create_items(self) -> None:
-
         # Create victory event pairs
         for character in self.chars:
             if self.options.goal.value == 0:
@@ -243,11 +252,29 @@ class CotNDWorld(World):
                   [item["name"] for item in self.chars], self.options.dlc.value,
                   goal_clear_req, bool(self.options.locked_lobby_npcs.value), )
 
+    def post_fill(self):
+        hints = self.location_hint_codes[self.player_name] = {
+            "Character": [], "Armor": [], "Weapon": [], "Upgrade": []
+        }
+
+        for sphere in self.multiworld.get_spheres():
+            for location in sphere:
+                item = location.item
+                if item.game != "Crypt of the NecroDancer" or item.player != self.player or item.code is None:
+                    continue
+
+                item_type = from_id(item.code)["type"]
+                if item_type in hints:
+                    hints[item_type].append(location.address)
+                elif item_type in {"Head", "Feet"}:
+                    hints["Armor"].append(location.address)
+
     def fill_slot_data(self) -> Dict[str, Any]:
         fill = self.options.as_dict(
             "death_link",
             "dlc",
             "goal",
+            "per_level_zone_clears",
             "character_blacklist",
             "all_zones_goal_clear",
             "zones_goal_clear",
@@ -264,6 +291,7 @@ class CotNDWorld(World):
         )
 
         fill["caged_npc_locations"] = self.caged_npc_locations
+        fill["location_hint_codes"] = self.location_hint_codes[self.player_name]
 
         return fill
 

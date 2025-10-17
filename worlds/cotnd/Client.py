@@ -8,14 +8,15 @@ import atexit
 import signal
 import urllib.parse
 from math import floor
+import random
 from typing import List, Any, Set, Optional, Dict
 
 import ModuleUpdate
 from CommonClient import CommonContext, ClientCommandProcessor, get_base_parser, logger
-from NetUtils import ClientStatus
+from NetUtils import ClientStatus, HintStatus
 from Utils import async_start, init_logging
 from worlds.cotnd.Locations import shop_location_range, from_id as location_from_id, all_locations
-from worlds.cotnd.Items import from_id as item_from_id
+from worlds.cotnd.Items import from_id as item_from_id, get_all_items
 
 ModuleUpdate.update()
 system = platform.system()
@@ -44,12 +45,15 @@ class CotNDContext(CommonContext):
     items_handling = 0b111
     want_slot_data = True
     slotdata = dict()
+    all_items = get_all_items()
     resync_items = False
     cotnd_handler = None
     connected_to_ap = False
     death_link_enabled = False
     disconnect_reason: str | None = None
     last_received_index = 0
+    sent_initial_loc_info = False
+    location_hints_remaining = {}
     _eventqueue: List[Dict] = []
 
     def __init__(self, server_address, password):
@@ -85,18 +89,25 @@ class CotNDContext(CommonContext):
         await self.send_connect()
 
     def on_cotnd_connect_to_ap(self):
-        """When the client connects to both CotND and AP"""
+        """When the client connects to AP"""
 
         goal, goal_required = ("All Zones", self.slotdata.get("all_zones_goal_clear")) if self.slotdata.get(
             "goal") == 0 else ("Zones", self.slotdata.get("zones_goal_clear"))
 
         print("Sending randomizer data to CotND")
+
+        self.location_hints_remaining = {
+            k: {loc for loc in v}
+            for k, v in self.slotdata.get("location_hint_codes", {}).items()
+        }
+
         self.cotnd_handler.enqueue({
             "datatype": "State",
             "connected": True,
             "goal": goal,
             "goal_required": goal_required,
-            "deathlink": "DeathLink" in self.tags,
+            "per_level_checks": True if self.slotdata.get("per_level_zone_clears") == 1 else False,
+            "deathlink": "death_link" in self.slotdata,
             "extra_modes": self.slotdata.get("included_extra_modes"),
             "dlc": self.slotdata.get("dlc"),
             "character_blacklist": self.slotdata.get("character_blacklist"),
@@ -119,7 +130,9 @@ class CotNDContext(CommonContext):
                     "min": self.slotdata.get("progression_price_min"),
                     "max": self.slotdata.get("progression_price_max"),
                 },
-            }
+            },
+            "location_hint_amounts": {k: len(v) for k, v in self.location_hints_remaining.items()},
+            "hint_cost": self.hint_cost
         })
 
         self.cotnd_handler.enqueue({
@@ -136,6 +149,12 @@ class CotNDContext(CommonContext):
             "cmd": "LocationScouts",
             "locations": [location_id for location_id in self.missing_locations if (
                     shop_location_range["start"] <= location_id <= shop_location_range["end"])]
+        }]))
+
+        # Get own hints to filter out already hinted locations
+        async_start(self.send_msgs([{
+            "cmd": "Get",
+            "keys": [f"_read_hints_{self.team}_{self.slot}"]
         }]))
 
     def on_cotnd_reader_connected(self):
@@ -171,23 +190,48 @@ class CotNDContext(CommonContext):
             elif cmd == "ReceivedItems":
                 new_items = self.items_received[self.last_received_index:]
                 indexed_items = []
+
                 for idx, netitem in enumerate(new_items, start=self.last_received_index):
+                    item_info = item_from_id(netitem.item)
                     indexed_items.append({
-                        "item": item_from_id(netitem.item)["cotnd_id"],
-                        "item_name": item_from_id(netitem.item)["name"],
+                        "item": item_info["cotnd_id"],
+                        "item_name": item_info["name"],
                         "location_code": str(netitem.location),
                         "playername": self.player_names[netitem.player],
                         "ap_index": idx
                     })
 
+                # Update hint counts if this location was hinted
+                for netitem in new_items:
+                    loc_str = netitem.location
+                    for k, locs in self.location_hints_remaining.items():
+                        if loc_str in locs:
+                            locs.discard(loc_str)
+                            break
+
                 self.last_received_index = len(self.items_received)
+                counts = {k: len(v) for k, v in self.location_hints_remaining.items()}
+
                 self.cotnd_handler.enqueue({
                     "datatype": "Items",
                     "items": indexed_items,
                     "resync": True if self.resync_items else None,
+                    "location_hint_amounts": counts,
                 })
 
                 self.resync_items = False
+
+            elif cmd == "Retrieved":
+                keys_dict = args.get("keys", {})
+
+                # Pull the stored hints for our team/slot
+                my_hints = keys_dict.get(f"_read_hints_{self.team}_{self.slot}", [])
+                hinted_locations = {hint["location"] for hint in my_hints}
+
+                # Filter sets in place
+                for k, locs in self.location_hints_remaining.items():
+                    locs.difference_update(self.checked_locations)
+                    locs.difference_update(hinted_locations)
 
             elif cmd == "RoomUpdate":
                 if args.get("checked_locations"):
@@ -218,13 +262,37 @@ class CotNDContext(CommonContext):
                         "item": item["cotnd_id"],
                         "playername": self.player_names[loc.player],
                         "itemname": item["name"],
-                        "flags": loc.flags
+                        "flags": loc.flags,
+                        "source": "Shop" if not self.sent_initial_loc_info else "Hint"
                     })
+
+                counts = {k: len(v) for k, v in self.location_hints_remaining.items()}
 
                 self.cotnd_handler.enqueue({
                     "datatype": "LocationInfo",
                     "location_info": location_info,
+                    "location_hint_amounts": counts
                 }, False)
+
+                if not self.sent_initial_loc_info:
+                    self.sent_initial_loc_info = True
+            elif cmd == "PrintJSON":
+                msg_type = args.get("type")
+                if msg_type != "Chat" and msg_type != "ServerChat":
+                    return
+
+                if msg_type == "ServerChat":
+                    player = "Server"
+                else:
+                    player = self.player_names[args.get("slot")]
+
+                message = args.get("message")
+
+                self.cotnd_handler.enqueue({
+                    "datatype": "Chat",
+                    "msg": message,
+                    "player": player
+                })
         except Exception as e:
             logger.error(f"CotND on_package error: {e}")
 
@@ -245,6 +313,7 @@ class CotNDContext(CommonContext):
 
         self.cotnd_handler.remove_lock()
         self.connected_to_ap = False
+        self.sent_initial_loc_info = False
         await super().disconnect(allow_autoreconnect)
 
     async def queue_event(self, data):
@@ -287,6 +356,36 @@ class CotNDContext(CommonContext):
                         "cmd": "LocationScouts",
                         "locations": [loc_id],
                     }])
+            elif eventtype == "Hint":
+                hint_type = event.get("type")
+
+                # Nothing to hint if all sets are empty
+                if not any(self.location_hints_remaining.values()):
+                    return
+
+                if hint_type == "Random":
+                    keys_with_avail = [k for k, locs in self.location_hints_remaining.items() if locs]
+                    if not keys_with_avail:
+                        return
+                    hint_type = random.choice(keys_with_avail)
+
+                if hint_type in self.location_hints_remaining:
+                    available = list(self.location_hints_remaining[hint_type])
+                    if available:
+                        loc_id = random.choice(available)
+
+                        # Remove immediately so we don’t repeat it before server confirms
+                        self.location_hints_remaining[hint_type].discard(loc_id)
+
+                        await self.send_msgs([{"cmd": "LocationScouts", "locations": [loc_id]}])
+                        await self.send_msgs([{
+                            "cmd": "CreateHints",
+                            "locations": [loc_id],
+                            "status": HintStatus.HINT_PRIORITY
+                        }])
+
+            elif eventtype == "Chat":
+                await self.send_msgs([{"cmd": "Say", "text": event.get("msg")}])
             elif eventtype == "Victory":
                 await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
             elif eventtype == "Disconnected":
@@ -294,6 +393,7 @@ class CotNDContext(CommonContext):
                 self.disconnect_reason = "mod disconnected"
                 self.cotnd_handler.remove_lock()
                 self.cotnd_handler.connected = False
+                self.sent_initial_loc_info = False
 
         except Exception as e:
             logger.error(f"Manage event error ({eventtype}): {e}")
@@ -307,7 +407,7 @@ def atomic_write(path: str, data: dict) -> None:
     fd, tmp_path = tempfile.mkstemp(prefix=base_name, dir=dir_name)
     try:
         with os.fdopen(fd, "w") as tmp:
-            json.dump(data, tmp)
+            json.dump(data, tmp, indent=4)
             tmp.flush()
             os.fsync(tmp.fileno())  # ensure all bytes are written
 
@@ -367,6 +467,8 @@ class CotNDHandler:
         with open(self.lock_file, "w") as f:
             f.write(str(time.time()))
             print("Connection lock created.")
+            # Reset mod-timestamp tracking
+            self._last_mod_ts = 0
 
     def update_lock(self):
         with open(self.lock_file, "w") as f:
@@ -379,6 +481,9 @@ class CotNDHandler:
                 print("Connection lock removed.")
         except Exception as e:
             print(f"Failed to remove lock: {e}")
+        finally:
+            # Reset timestamp tracking on removal too
+            self._last_mod_ts = 0
 
     async def handle_incoming_filedata(self, file_data: Dict[str, Any]):
         """Since the filedata is sent all at once and isn't cleared, verifying must be done to reduce redundant data."""
@@ -395,6 +500,19 @@ class CotNDHandler:
                         "sources": list(_sources)
                     })
             elif datatype == "Death":
+                message = data.get("msg", "")
+                await self.handle_cotnd_filedata_entry({
+                    "datatype": datatype,
+                    "msg": message
+                })
+            elif datatype == "Hint":
+                hint_type = data.get("type", "Random")
+                await self.handle_cotnd_filedata_entry({
+                    "datatype": datatype,
+                    "type": hint_type
+                })
+                print(self.ctx.location_hints_remaining)
+            elif datatype == "Chat":
                 message = data.get("msg", "")
                 await self.handle_cotnd_filedata_entry({
                     "datatype": datatype,
@@ -447,7 +565,7 @@ class CotNDHandler:
             logger.error(f'Unrecognized operating system {system}, please report.')
             raise RuntimeError(f'Unsupported operating system: {system}')
 
-        """in.log sends data into the game. out.log gets data out from the game."""
+        """in.json sends data into the game. out.json gets data out from the game."""
         if not os.path.exists(data_path):
             message = (f'No local data found for NecroDancer at {data_path}. '
                        'Please install and run Crypt of the NecroDancer before attempting to run this client.')
@@ -462,7 +580,7 @@ class CotNDHandler:
 
     def read_incoming_data(self) -> Optional[Dict]:
         """Read AP data coming from CotND, only update heartbeat on new mod timestamp."""
-        out_file = self.base_dir + "/out.log"
+        out_file = self.base_dir + "/out.json"
         if not os.path.isfile(out_file):
             return None
 
@@ -472,23 +590,24 @@ class CotNDHandler:
         try:
             data = json.loads(raw or "{}")
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse out.log: {e}")
+            logger.error(f"Failed to parse out.json: {e}")
             return None
 
         mod_ts: int = data.get("timestamp")
         if mod_ts is not None:
-            # Only bump heartbeat if the mod's timestamp has changed
+            # Update last_mod_message_time whenever we get a mod timestamp.
+            # If timestamp changed, update our cached _last_mod_ts as well.
+            self.last_mod_message_time = time.time()
             if mod_ts != self._last_mod_ts:
-                self.last_mod_message_time = time.time()
                 self._last_mod_ts = mod_ts
 
         return data
 
     def write_outgoing_data(self, main_data: Dict[str, any] = None):
         """Send AP data to CotND."""
-        in_file = self.base_dir + "/in.log"
+        in_file = self.base_dir + "/in.json"
 
-        # Skip writing if data is not dirty and the in.log file already has content
+        # Skip writing if data is not dirty and the in.json file already has content
         if not self.outgoing_data_dirty and os.path.exists(in_file):
             if os.path.getsize(in_file) > 0:
                 return
