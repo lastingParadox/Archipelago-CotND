@@ -107,7 +107,7 @@ class CotNDContext(CommonContext):
             "goal": goal,
             "goal_required": goal_required,
             "per_level_checks": True if self.slotdata.get("per_level_zone_clears") == 1 else False,
-            "deathlink": "death_link" in self.slotdata,
+            "deathlink": self.slotdata.get("deathlink", False),
             "extra_modes": self.slotdata.get("included_extra_modes"),
             "dlc": self.slotdata.get("dlc"),
             "character_blacklist": self.slotdata.get("character_blacklist"),
@@ -357,32 +357,45 @@ class CotNDContext(CommonContext):
                         "locations": [loc_id],
                     }])
             elif eventtype == "Hint":
-                hint_type = event.get("type")
+                hint_types = event.get("type")
+
+                # Normalize to list
+                if isinstance(hint_types, str):
+                    hint_types = [hint_types]
 
                 # Nothing to hint if all sets are empty
                 if not any(self.location_hints_remaining.values()):
                     return
 
-                if hint_type == "Random":
-                    keys_with_avail = [k for k, locs in self.location_hints_remaining.items() if locs]
-                    if not keys_with_avail:
-                        return
-                    hint_type = random.choice(keys_with_avail)
+                chosen_locations = []
 
-                if hint_type in self.location_hints_remaining:
-                    available = list(self.location_hints_remaining[hint_type])
-                    if available:
-                        loc_id = random.choice(available)
+                for hint_type in hint_types:
+                    chosen_type = hint_type
 
-                        # Remove immediately so we don’t repeat it before server confirms
-                        self.location_hints_remaining[hint_type].discard(loc_id)
+                    if hint_type == "Random":
+                        keys_with_avail = [k for k, locs in self.location_hints_remaining.items() if locs]
+                        if not keys_with_avail:
+                            continue
+                        chosen_type = random.choice(keys_with_avail)
 
-                        await self.send_msgs([{"cmd": "LocationScouts", "locations": [loc_id]}])
-                        await self.send_msgs([{
-                            "cmd": "CreateHints",
-                            "locations": [loc_id],
-                            "status": HintStatus.HINT_PRIORITY
-                        }])
+                    if chosen_type in self.location_hints_remaining:
+                        available = list(self.location_hints_remaining[chosen_type])
+                        if available:
+                            loc_id = random.choice(available)
+
+                            # Remove immediately so we don’t repeat it before server confirms
+                            self.location_hints_remaining[chosen_type].discard(loc_id)
+
+                            chosen_locations.append(loc_id)
+
+                # Send one batch if we found any
+                if chosen_locations:
+                    await self.send_msgs([{"cmd": "LocationScouts", "locations": chosen_locations}])
+                    await self.send_msgs([{
+                        "cmd": "CreateHints",
+                        "locations": chosen_locations,
+                        "status": HintStatus.HINT_PRIORITY
+                    }])
 
             elif eventtype == "Chat":
                 await self.send_msgs([{"cmd": "Say", "text": event.get("msg")}])
@@ -440,7 +453,7 @@ class CotNDHandler:
         # Clean-up in case of power outages, etc.
         self.remove_lock()
 
-        # Clean-up on disconnect or signals (Ctrl+C, close, etc)
+        # Clean-up on disconnect or signals (Ctrl+C, close, etc.)
         atexit.register(self.remove_lock)
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, lambda s, f: self.remove_lock())
