@@ -139,6 +139,7 @@ class CotNDWorld(World):
             [self.options.goal.value],
             self.options.included_extra_modes.value,
             bool(self.options.locked_lobby_npcs.value),
+            bool(self.options.include_codex_checks.value),
             bool(self.options.per_level_zone_clears.value)
         )
 
@@ -301,8 +302,10 @@ class CotNDWorld(World):
         spoiler_handle.write("\n\nLocked NPC Locations:")
         for player in cotnd_players:
             name = multiworld.get_player_name(player)
-            spoiler_handle.write(f"\n{name}\n")
             cotnd_world: CotNDWorld = multiworld.worlds[player]
+            if not bool(cotnd_world.options.locked_lobby_npcs.value):
+                continue
+            spoiler_handle.write(f"\n{name}\n")
             max_len = max(len(npc) for npc in cotnd_world.caged_npc_locations)
 
             for npc, location in cotnd_world.caged_npc_locations.items():
