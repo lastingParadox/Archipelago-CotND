@@ -200,11 +200,12 @@ def get_extra_mode_clear_locations(dlcs: List[str], blacklist: List[str] | None 
 LOBBY_NPCS = ["Codex", "Merlin", "Hintmaster", "Janitor", "Diamond Dealer"]
 
 
-def get_lobby_npc_locations():
+def get_codex_locations():
     codex_locs = ["Dragon Lore", "Trap Lore", "Bomb Lore", "How to Get Away with Murder"]
-    caged_list = [f"Caged {npc}" for npc in LOBBY_NPCS]
+    return codex_locs
 
-    return codex_locs + caged_list
+def get_lobby_npc_locations():
+    return [f"Caged {npc}" for npc in LOBBY_NPCS]
 
 
 # ==============================
@@ -273,26 +274,30 @@ def get_all_locations() -> List[LocationDict]:
     """Return all possible locations across all DLCs, modes, shops, lobby NPCs."""
     all_dlcs = DLCS[:]  # ["base", "amplified", "synchrony", "miku"]
 
-    # Zone clears
-    zone_locs, all_zone_locs = get_zone_clear_locations(all_dlcs)
+    # Zone clears. We run this twice to get the locs for both level clears and full zone clears.
+    zone_floor_locs, all_zone_locs = get_zone_clear_locations(all_dlcs)
+    zone_zone_locs, _ = get_zone_clear_locations(all_dlcs, None, False)
+
+    zone_locs = zone_floor_locs + zone_zone_locs
+
     event_locs = get_event_locations(all_dlcs)
     extra_modes = get_extra_mode_clear_locations(all_dlcs, [], EXTRA_MODES["base"] + EXTRA_MODES["amplified"])
     shops = get_shop_locations(all_dlcs)
+    codex_locs = get_codex_locations()
     lobby_npcs = get_lobby_npc_locations()
 
-    return build_location_dicts(shops + lobby_npcs + zone_locs + all_zone_locs + event_locs + extra_modes)
+    return build_location_dicts(shops + codex_locs + lobby_npcs + zone_locs + all_zone_locs + event_locs + extra_modes)
 
 
 all_locations = {
     location["name"]: location for location in get_all_locations()
 }
 
-
 def from_id(location_id: int) -> LocationDict:
-    matching = [item for item in all_locations.values() if item['code'] == location_id]
+    matching = [loc for loc in all_locations.values() if loc['code'] == location_id]
     if len(matching) == 0:
-        raise ValueError(f"No item data for item id '{location_id}'")
-    assert len(matching) < 2, f"Multiple item data with id '{location_id}. Please report."
+        raise ValueError(f"No location data for location id '{location_id}'")
+    assert len(matching) < 2, f"Multiple location data with id '{location_id}. Please report."
     return matching[0]
 
 
@@ -306,6 +311,7 @@ def get_available_locations(
         goals: List[int] | None = None,
         modes: List[str] | None = None,
         include_lobby_npcs: bool = True,
+        include_codex_checks: bool = True,
         per_level: bool = True,
 ) -> List[LocationDict]:
     """Return only available locations based on params (dlcs, blacklist, modes, lobby NPCs)."""
@@ -323,9 +329,11 @@ def get_available_locations(
     # Shops
     shops = get_shop_locations(dlcs)
 
+    codex_locs = get_codex_locations() if include_codex_checks else []
+
     # Lobby NPCs
     lobby_npcs = get_lobby_npc_locations() if include_lobby_npcs else []
 
-    names = shops + lobby_npcs + zone_locs + (all_zone_locs if 0 in goals else []) + event_locs + extra_modes
+    names = shops + codex_locs + lobby_npcs + zone_locs + (all_zone_locs if 0 in goals else []) + event_locs + extra_modes
 
     return [all_locations[location_name] for location_name in names]

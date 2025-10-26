@@ -15,6 +15,8 @@ def get_regions_to_locations(options: CotNDOptions) -> dict[str, list[LocationDi
         [options.goal.value],
         options.included_extra_modes.value,
         bool(options.locked_lobby_npcs.value),
+        bool(options.include_codex_checks.value),
+        bool(options.per_level_zone_clears.value)
     )
 
     return {

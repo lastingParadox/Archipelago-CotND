@@ -119,6 +119,11 @@ class IncludedExtraModes(OptionList):
     valid_keys = frozenset(all_game_modes)
     default = []
 
+class IncludeCodexChecks(DefaultOnToggle):
+    """Determines whether Codex location checks (Bomb Lore, How to Get Away with Murder, etc.) will be included in progression. Default is true."""
+
+    display_name = "Include Codex Checks"
+
 class LockedLobbyNPCs(DefaultOnToggle):
     """Determines whether the lobby NPCs will be locked and will need to be saved in a run to unlock them in the lobby. Default is true."""
 
@@ -262,6 +267,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     starting_characters_amount: StartingCharactersAmount
     character_blacklist: CharacterBlacklist
     included_extra_modes: IncludedExtraModes
+    include_codex_checks: IncludeCodexChecks
     locked_lobby_npcs: LockedLobbyNPCs
     lobby_npc_items: LobbyNPCItems
     trap_percentage: TrapPercentage
