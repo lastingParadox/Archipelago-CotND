@@ -1,6 +1,6 @@
 from typing import Dict, List, TypedDict
 from BaseClasses import Location
-from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars
+from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars, shovel_knight_chars
 
 base_code = 742_080
 shop_location_range = {"start": 742_080, "end": 742_186}
@@ -15,13 +15,14 @@ class LocationDict(TypedDict):
     code: int
 
 
-DLCS = ["amplified", "synchrony", "miku"]
+DLCS = ["amplified", "synchrony", "miku", "shovel knight"]
 
 ZONE_CLEAR_CHARS = {
     "base": base_chars,
     "amplified": amplified_chars,
     "synchrony": synchrony_chars,
-    "miku": miku_chars
+    "miku": miku_chars,
+    "shovel knight": shovel_knight_chars
 }
 
 HEPHAESTUS = {
@@ -91,13 +92,17 @@ def build_location_dicts(zone_locations: List[str]) -> List[LocationDict]:
 # Zone Clear Locations
 # ==============================
 
-def get_zone_clear_locations(dlcs: List[str], blacklist: List[str] | None = None, per_level = True) -> tuple[list[str], list[str]]:
+def get_zone_clear_locations(
+    dlcs: List[str],
+    blacklist: List[str] | None = None,
+    per_level: bool = True,
+) -> tuple[list[str], list[str]]:
     """Return (zone_clear, all_zone_clear) locations.
 
-        If per_level is True, expands each zone into individual levels (1-1, 1-2, 1-3, Boss).
-        Otherwise, just uses "Zone X".
-        Handles special boss cases for specific characters.
-        """
+    If per_level is True, expands each zone into individual levels (1-1, 1-2, 1-3, Boss).
+    Otherwise, just uses "Zone X".
+    Handles special boss cases for specific characters.
+    """
     dlcs = normalize_dlcs(dlcs)
     chars = get_characters_for_dlcs(dlcs, blacklist)
     amplified = "amplified" in dlcs
@@ -105,44 +110,37 @@ def get_zone_clear_locations(dlcs: List[str], blacklist: List[str] | None = None
     zone_locations: list[str] = []
 
     for char in chars:
-        if per_level:
-            for zone in range(1, (6 if amplified else 5)):
-                # Add standard levels
-                zone_locations.extend([f"{char} - Zone {zone} - Floor {level}" for level in range(1, 4)])
+        for zone in range(1, (6 if amplified else 5)):
+            if per_level:
+                # Add standard floors
+                zone_locations.extend(
+                    [f"{char} - Zone {zone} - Floor {level}" for level in range(1, 4)]
+                )
 
-                # Handle boss
-                boss_label = f"Zone {zone} - Boss"
-                if char == "Dove":
-                    # Dove has no final boss
-                    continue
-                if zone == (4 if not amplified else 5):
-                    # Final boss zone → handle special cases
-                    if char == "Cadence":
-                        zone_locations.append(f"{char} - Dead Ringer")
-                        zone_locations.append(f"{char} - NecroDancer")
-                        continue
-                    elif char == "Melody":
-                        zone_locations.append(f"{char} - NecroDancer")
-                        continue
-                    elif char == "Nocturna":
-                        zone_locations.append(f"{char} - Frankensteinway")
-                        zone_locations.append(f"{char} - The Conductor")
-                        continue
-                elif zone == 1 and char == "Aria":
-                    zone_locations.append(f"{char} - Golden Lute")
-                    continue
-                # Default boss
-                zone_locations.append(f"{char} - {boss_label}")
-        else:
-            # Simple Zone X clear
-            for zone in range(1, (6 if amplified else 5)):
-                zone_locations.append(f"{char} - Zone {zone}")
+                # Default boss for every character
+                boss_label = f"{char} - Zone {zone} - Boss"
+                zone_locations.append(boss_label)
+            else:
+                # Simple Zone X clear
+                    zone_locations.append(f"{char} - Zone {zone}")
+
+            # Special-case bosses (added *in addition* to the regular one)
+            if zone == 4:
+                if char == "Cadence":
+                    zone_locations.append(f"{char} - Dead Ringer")
+                    zone_locations.append(f"{char} - NecroDancer")
+                elif char == "Melody":
+                    zone_locations.append(f"{char} - NecroDancer")
+            elif zone == 5 and char == "Nocturna":
+                zone_locations.append(f"{char} - Frankensteinway")
+                zone_locations.append(f"{char} - The Conductor")
+            elif zone == 1 and char == "Aria":
+                zone_locations.append(f"{char} - Golden Lute")
 
     # Add All Zones clears
     all_zone_locations = [f"{char} - All Zones" for char in chars]
 
     return zone_locations, all_zone_locations
-
 
 # ==============================
 # Event Locations

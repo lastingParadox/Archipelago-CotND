@@ -25,7 +25,8 @@ all_chars = [
     "Dorian",
     "Coda",
     "Klarinetta",
-    "Miku"
+    "Miku",
+    "Shovel Knight"
 ]
 
 all_game_modes = [
@@ -72,21 +73,19 @@ class ZonesGoalClear(Range):
 
 class PerLevelZoneClears(DefaultOnToggle):
     """Determines whether zone clear checks are split per level (e.g., 1-1, 1-2, 1-3, Boss)
-    instead of just a single 'Zone X' check. Default is false.
-
-    Special final boss cases apply for certain characters (Cadence, Melody, Aria, Nocturna)."""
+    instead of just a single 'Zone X' check. Default is true."""
 
     display_name = "Per-Level Zone Clears"
 
 
 class DLC(OptionList):
     """Which DLCs to include content from in progression and checks.
-    Options include: Amplified, Synchrony, Miku
+    Options include: Amplified, Synchrony, Miku, Shovel Knight
     Note: Excluding the Synchrony DLC does not mean that you can play this APWorld without the Synchrony DLC. This is only to exclude content from the Synchrony DLC in the multiworld.
     Note: Excluding the Amplified DLC will remove Zone 5 from progression altogether."""
 
     display_name = "DLCs"
-    valid_keys = ["Amplified", "Synchrony", "Miku"]
+    valid_keys = ["Amplified", "Synchrony", "Miku", "Shovel Knight"]
     default = ["Amplified", "Synchrony"]
 
 
