@@ -35,7 +35,7 @@ def set_soft_shop_rules(world: MultiWorld, player: int, locations: List[str], sl
             )
 
 def set_rules(world: MultiWorld, player: int, locations: List[str], available_chars: List[str], dlcs: List[str],
-              goal_clear_req: int, locked_lobby_npcs: bool):
+              goal_clear_req: int, locked_lobby_npcs: bool, codex_enabled: bool):
     all_chars = base_chars[:]
 
     if "Amplified" in dlcs:
@@ -91,8 +91,9 @@ def set_rules(world: MultiWorld, player: int, locations: List[str], available_ch
 
         codex_locations = ["Dragon Lore", "Trap Lore", "Bomb Lore", "How to Get Away with Murder"]
 
-        for location in codex_locations:
-            add_rule(world.get_location(location, player), lambda state: state.has("Codex", player))
+        if codex_enabled:
+            for location in codex_locations:
+                add_rule(world.get_location(location, player), lambda state: state.has("Codex", player))
 
     world.completion_condition[player] = (
         lambda state: state.has("Complete", player, goal_clear_req)

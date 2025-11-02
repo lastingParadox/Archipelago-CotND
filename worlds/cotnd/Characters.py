@@ -21,6 +21,8 @@ synchrony_chars = ["Chaunter", "Klarinetta", "Suzu"]
 
 miku_chars = ["Miku"]
 
+shovel_knight_chars = ["Shovel Knight"]
+
 
 def get_all_characters(dlcs: Set[str]):
     all_chars = base_chars.copy()
@@ -30,6 +32,8 @@ def get_all_characters(dlcs: Set[str]):
         all_chars += synchrony_chars
     if "Miku" in dlcs:
         all_chars += miku_chars
+    if "Shovel Knight" in dlcs:
+        all_chars += shovel_knight_chars
 
     return all_chars
 

@@ -251,7 +251,7 @@ class CotNDWorld(World):
 
         set_rules(self.multiworld, self.player, [location['name'] for location in self.locations],
                   [item["name"] for item in self.chars], self.options.dlc.value,
-                  goal_clear_req, bool(self.options.locked_lobby_npcs.value), )
+                  goal_clear_req, bool(self.options.locked_lobby_npcs.value), bool(self.options.include_codex_checks.value))
 
     def post_fill(self):
         hints = self.location_hint_codes[self.player_name] = {
