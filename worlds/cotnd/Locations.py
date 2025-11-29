@@ -117,9 +117,10 @@ def get_zone_clear_locations(
                     [f"{char} - Zone {zone} - Floor {level}" for level in range(1, 4)]
                 )
 
-                # Default boss for every character
-                boss_label = f"{char} - Zone {zone} - Boss"
-                zone_locations.append(boss_label)
+                # Default boss for every character except Dove
+                if not char == "Dove":
+                    boss_label = f"{char} - Zone {zone} - Boss"
+                    zone_locations.append(boss_label)
             else:
                 # Simple Zone X clear
                     zone_locations.append(f"{char} - Zone {zone}")
