@@ -3,7 +3,7 @@ from typing import List, Dict
 from BaseClasses import LocationProgressType, MultiWorld
 from worlds.generic.Rules import set_rule, add_rule
 
-from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars
+from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars, shovel_knight_chars
 from .Locations import get_shop_slot_lengths
 
 
@@ -44,6 +44,8 @@ def set_rules(world: MultiWorld, player: int, locations: List[str], available_ch
         all_chars += synchrony_chars
     if "Miku" in dlcs:
         all_chars += miku_chars
+    if "Shovel Knight" in dlcs:
+        all_chars += shovel_knight_chars
 
     zone_clear_locations_by_character = [
         [location for location in locations if location.startswith(f"{char}")]
