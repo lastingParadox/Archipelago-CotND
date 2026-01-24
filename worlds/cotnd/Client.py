@@ -8,6 +8,10 @@ import time
 import urllib.parse
 from typing import Dict, Set, Any
 
+import Utils
+from worlds.cotnd.vendor_zstandard import load_vendored_zstandard
+load_vendored_zstandard(os.path.join(Utils.user_path(), "custom_worlds", "cotnd.apworld"))
+
 import zstandard
 
 import ModuleUpdate
@@ -454,7 +458,7 @@ class CotNDServer:
 
     async def send_packet(self, packet: dict):
         if not self.cotnd_connected or self._writer is None:
-            print(f"[CotNDServer] WARNING: Not sending message as cotnd_connected is false!")
+            print(f"[CotNDServer] WARNING: Not sending message as CotND isn't connected!")
             return
 
         packet["timestamp"] = time.time()
@@ -474,6 +478,7 @@ class CotNDServer:
         # 2) Compress magicless
         # compress_magicless must produce magicless zstd frame
         compressed = self._zstd_cctx.compress(serialized)[4:]
+        print("COMPRESSED", compressed)
 
         # 3) Prefix length (big-endian uint32)
         header = struct.pack(">I", len(compressed))
