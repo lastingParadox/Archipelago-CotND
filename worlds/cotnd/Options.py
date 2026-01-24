@@ -48,7 +48,7 @@ class Goal(Choice):
     display_name = "Goal"
     option_All_Zones = 0
     option_Zones = 1
-    default = 0
+    default = 1
 
 
 class AllZonesGoalClear(Range):
@@ -57,8 +57,8 @@ class AllZonesGoalClear(Range):
 
     display_name = "Characters Required for All Zones Goal"
     range_start = 1
-    range_end = 19
-    default = 6
+    range_end = 20
+    default = 8
 
 
 class ZonesGoalClear(Range):
@@ -68,7 +68,7 @@ class ZonesGoalClear(Range):
     display_name = "Amount required for Zones Goal"
     range_start = 1
     range_end = 95
-    default = 30
+    default = 40
 
 
 class PerLevelZoneClears(DefaultOnToggle):
@@ -101,12 +101,12 @@ class StartingCharactersAmount(Range):
 
 class CharacterBlacklist(OptionList):
     """Which characters to exclude from checks and progression. Note that this will disable the character from the run entirely if included.
-    Options include: Cadence, Melody, Aria, Nocturna, Eli, Bolt, Diamond, Chaunter, Dove, Bard, Mary, Suzu, Monk, Reaper, Tempo, Dorian, Coda, Klarinetta, Miku
+    Options include: Cadence, Melody, Aria, Nocturna, Eli, Bolt, Diamond, Chaunter, Dove, Bard, Mary, Suzu, Monk, Reaper, Tempo, Dorian, Coda, Klarinetta, Miku, Shovel Knight
     Note: If this list consists of all available characters, then Cadence will be removed from the blacklist to prevent progression issues."""
 
     display_name = "Character Blacklist"
     valid_keys = frozenset(all_chars)
-    default = ["Coda"]
+    default = ["Coda", "Bolt"]
 
 
 class IncludedExtraModes(OptionList):
@@ -119,17 +119,17 @@ class IncludedExtraModes(OptionList):
     default = []
 
 class IncludeCodexChecks(DefaultOnToggle):
-    """Determines whether Codex location checks (Bomb Lore, How to Get Away with Murder, etc.) will be included in progression. Default is true."""
+    """Determines whether Tutorial levels (Bomb Lore, How to Get Away with Murder, etc.) will be included in progression. Default is true."""
 
     display_name = "Include Codex Checks"
 
 class LockedLobbyNPCs(DefaultOnToggle):
-    """Determines whether the lobby NPCs will be locked and will need to be saved in a run to unlock them in the lobby. Default is true."""
+    """Determines whether the lobby NPCs will be locked and will need to be saved in a run to access their rooms in the lobby. Default is true."""
 
     display_name = "Locked Lobby NPCs"
 
 class LobbyNPCItems(Toggle):
-    """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead. Default is false.
+    """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead of unlocking their room. Default is false.
     Note: If Locked Lobby NPCs is false, this will be disabled."""
 
     display_name = "Lobby NPC Items"
