@@ -454,7 +454,7 @@ class CotNDServer:
 
     async def send_packet(self, packet: dict):
         if not self.cotnd_connected or self._writer is None:
-            print(f"Exiting... {self.cotnd_connected} ")
+            print(f"[CotNDServer] WARNING: Not sending message as cotnd_connected is false!")
             return
 
         packet["timestamp"] = time.time()
