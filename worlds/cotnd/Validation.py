@@ -1,5 +1,8 @@
-from .Characters import get_all_characters
-from .Items import get_default_items, get_all_npc_items
+from typing import List
+
+from .Characters import get_available_characters
+from .Items import get_starting_pool, CotNDItemData, ItemType
+from .Utils import character_requirements
 
 
 def ensure_min_max(options, min_name: str, max_name: str) -> None:
@@ -12,9 +15,9 @@ def ensure_min_max(options, min_name: str, max_name: str) -> None:
         setattr(options, max_name, type(getattr(options, max_name))(min_val))
 
 def validate_blacklist(options, dlcs):
-    all_chars = get_all_characters(dlcs)
     blacklist = set(options.character_blacklist.value)
-    if set(all_chars).issubset(blacklist):
+    all_chars = get_available_characters(blacklist, dlcs)
+    if len(all_chars) == 0:
         print("[WARNING] Removing Cadence from the blacklist to maintain progression.")
         blacklist = [c for c in blacklist if c != "Cadence"]
         options.character_blacklist.value = blacklist
@@ -24,7 +27,7 @@ def validate_blacklist(options, dlcs):
 def validate_modes(options, dlcs):
     included_modes = list(options.included_extra_modes.value)
 
-    if "Amplified" not in dlcs:
+    if "amplified" not in dlcs:
         amplified_modes = {"No Return", "Hard", "Phasing", "Randomizer", "Mystery"}
         before = set(included_modes)
         included_modes = [mode for mode in included_modes if mode not in amplified_modes]
@@ -34,12 +37,6 @@ def validate_modes(options, dlcs):
         options.included_extra_modes.value = included_modes
 
     return included_modes
-
-
-def validate_lobby_npcs(options):
-    if options.lobby_npc_items and not options.locked_lobby_npcs:
-        print("[WARNING] Disabling Lobby NPC items as Locked Lobby NPCs is disabled.")
-        options.lobby_npc_items.value = False
 
 
 def cap_option(options, option_name: str, cap: int):
@@ -53,11 +50,58 @@ def validate_price_ranges(options):
     for prefix in ("randomized", "filler", "useful", "progression"):
         ensure_min_max(options, f"{prefix}_price_min", f"{prefix}_price_max")
 
+def validate_starting_character(world, character_option, items: List[CotNDItemData]):
+    characters = [item for item in items if item.type is ItemType.CHARACTER]
 
-def precollect_defaults(world, options):
-    for item in get_default_items(options.dlc):
-        world.multiworld.push_precollected(world.create_item(item['name']))
+    for character in characters:
+        if character.name == character_option:
+            return character
 
-def precollect_lobby_npcs(world):
-    for item in get_all_npc_items():
-        world.multiworld.push_precollected(world.create_item(item['name']))
+    # Fallback: pick a random valid character
+    new_character = world.random.choice(characters)
+    print(f"[WARNING] Setting Starting Character to {new_character.name} as {character_option} is not in the item pool.")
+    return new_character
+
+
+def collect_starting_pool(world, items_list, starting_inventory, include_materials):
+    starting_pool = get_starting_pool(
+        world.random,
+        items_list,
+        starting_inventory,
+        include_materials
+    )
+
+    # Push to collect
+    for item in starting_pool:
+        world.multiworld.push_precollected(world.create_item(item.name))
+
+    # Remove pre-collected items from item pool
+    remaining_items = items_list.copy()
+    for item in starting_pool:
+        remaining_items.remove(item)
+
+    return remaining_items
+
+def collect_starting_character(world, items_list, starting_character, character_unlocks):
+    character = validate_starting_character(world, starting_character, items_list)
+
+    # Precollect the character itself
+    world.multiworld.push_precollected(world.create_item(character.name))
+
+    # Index items by name
+    items_by_name = {item.name: item for item in items_list}
+
+    # Remove the character from the pool
+    items_by_name.pop(character.name, None)
+
+    # Precollect required starting items for this character if logic requires it
+    if character_unlocks != 0:
+        for requirement in character_requirements.get(character.name, set()):
+            if requirement in items_by_name:
+                world.multiworld.push_precollected(
+                    world.create_item(requirement)
+                )
+                del items_by_name[requirement]
+
+    # Return remaining items
+    return list(items_by_name.values())

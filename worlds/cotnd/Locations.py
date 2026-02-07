@@ -1,338 +1,355 @@
-from typing import Dict, List, TypedDict
-from BaseClasses import Location
-from .Characters import base_chars, amplified_chars, synchrony_chars, miku_chars, shovel_knight_chars
+import math
+from collections import defaultdict
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Set, Optional
 
-base_code = 742_080
-shop_location_range = {"start": 742_080, "end": 742_186}
+from BaseClasses import Location
+from worlds.cotnd.Characters import get_available_characters
+from worlds.cotnd.Items import CotNDItemData
+from worlds.cotnd.Utils import LOBBY_NPCS, normalize_dlc, DLC, EXTRA_MODES
+
+BASE_CODE = 742_080
+BASE_SHOP_COUNT = 69
+AMP_SHOP_COUNT = 29
+SYNC_SHOP_COUNT = 4
+# 225 shop locations should provide an ample barrier for edge case options (e.g., 1 character, no codex locations, no per_level checks, goal = zones)
+TOTAL_SHOP_LOCATIONS = 225
+SHOPKEEPER_COUNT = 3
+SHOP_LOCATION_RANGE = {"start": BASE_CODE, "end": BASE_CODE + TOTAL_SHOP_LOCATIONS}
 
 
 class CotNDLocation(Location):
     game: str = "Crypt of the NecroDancer"
 
 
-class LocationDict(TypedDict):
+class LocationType(Enum):
+    FLOOR = auto()
+    ZONE = auto()
+    BOSS = auto()
+    UNIQUE_BOSS = auto()
+    ALL_ZONES = auto()
+    EXTRA_MODE = auto()
+    SHOP = auto()
+    TUTORIAL = auto()
+    NPC = auto()
+    ALL_ZONES_EVENT = auto()
+    ZONES_EVENT = auto()
+
+
+PLURALS: dict[LocationType, str] = {
+    LocationType.FLOOR: "Floors",
+    LocationType.ZONE: "Zones",
+    LocationType.BOSS: "Zone Bosses",
+    LocationType.UNIQUE_BOSS: "Story Bosses",
+    LocationType.ALL_ZONES: "All Zones Completions",
+    LocationType.EXTRA_MODE: "Extra Modes Completions",
+    LocationType.SHOP: "Shop Slots",
+    LocationType.TUTORIAL: "Codex Rooms",
+    LocationType.NPC: "Caged NPCs"
+}
+
+
+@dataclass(frozen=True, slots=True)
+class RawCotNDLocationData:
     name: str
-    code: int
+    type: LocationType
+    character: Optional[str]
+    dlc: DLC
+    zone: Optional[int]
 
 
-DLCS = ["amplified", "synchrony", "miku", "shovel knight"]
-
-ZONE_CLEAR_CHARS = {
-    "base": base_chars,
-    "amplified": amplified_chars,
-    "synchrony": synchrony_chars,
-    "miku": miku_chars,
-    "shovel knight": shovel_knight_chars
-}
-
-HEPHAESTUS = {
-    "name": "Hephaestus",
-    "location_amounts": {
-        "base": {"left": 11, "center": 19, "right": 8},
-        "amplified": {"left": 3, "center": 13, "right": 4},
-        "synchrony": {"left": 3, "center": 0, "right": 1}
-    }
-}
-
-MERLIN = {
-    "name": "Merlin",
-    "location_amounts": {
-        "base": {"left": 5, "center": 11, "right": 7},
-        "amplified": {"left": 0, "center": 3, "right": 6},
-        "synchrony": {"left": 0, "center": 0, "right": 0}
-    }
-}
-
-DUNGEON_MASTER = {
-    "name": "Dungeon Master",
-    "location_amounts": {
-        "base": {"left": 3, "center": 2, "right": 3},
-        "amplified": {"left": 0, "center": 0, "right": 0},
-        "synchrony": {"left": 0, "center": 0, "right": 0}
-    }
-}
+@dataclass(frozen=True, slots=True)
+class CotNDLocationData(RawCotNDLocationData):
+    code: int | None
 
 
-# ==============================
-# Helpers
-# ==============================
+def generate_shop_locations(num: int) -> list[RawCotNDLocationData]:
+    shopkeepers = ["Hephaestus", "Merlin", "Dungeon Master"]
 
-def normalize_dlcs(dlcs: List[str]) -> List[str]:
-    """Normalize DLC names to lowercase."""
-    return [d.lower() for d in dlcs]
+    directions = ["Center", "Left", "Right"]
 
+    locations: list[RawCotNDLocationData] = []
+    round_index = 1
 
-def apply_dlc_amounts(dlcs: List[str], amounts: Dict[str, Dict[str, int]]) -> Dict[str, int]:
-    """Return totals after applying DLC-specific overrides."""
-    total = amounts["base"].copy()
-    for dlc in dlcs:
-        if dlc in amounts:
-            for key, value in amounts[dlc].items():
-                total[key] = total.get(key, 0) + value
-    return total
+    while len(locations) < num:
+        for direction in directions:
+            for shopkeeper in shopkeepers:
+                if len(locations) >= num:
+                    return locations
 
-
-def get_characters_for_dlcs(dlcs: List[str], blacklist: List[str] | None = None) -> list[str]:
-    """Return all available characters for given DLCs, minus blacklist."""
-    chars: List[str] = ZONE_CLEAR_CHARS["base"].copy()
-    for dlc in DLCS:
-        if dlc in dlcs:
-            chars += ZONE_CLEAR_CHARS[dlc]
-    if blacklist:
-        chars = [c for c in chars if c not in blacklist]
-    return chars
-
-
-def build_location_dicts(zone_locations: List[str]) -> List[LocationDict]:
-    """Convert location names to dicts with placeholder codes."""
-    return [{"name": loc, "code": i} for i, loc in enumerate(zone_locations, start=base_code)]
-
-
-# ==============================
-# Zone Clear Locations
-# ==============================
-
-def get_zone_clear_locations(
-    dlcs: List[str],
-    blacklist: List[str] | None = None,
-    per_level: bool = True,
-) -> tuple[list[str], list[str]]:
-    """Return (zone_clear, all_zone_clear) locations.
-
-    If per_level is True, expands each zone into individual levels (1-1, 1-2, 1-3, Boss).
-    Otherwise, just uses "Zone X".
-    Handles special boss cases for specific characters.
-    """
-    dlcs = normalize_dlcs(dlcs)
-    chars = get_characters_for_dlcs(dlcs, blacklist)
-    amplified = "amplified" in dlcs
-
-    zone_locations: list[str] = []
-
-    for char in chars:
-        for zone in range(1, (6 if amplified else 5)):
-            if per_level:
-                # Add standard floors
-                zone_locations.extend(
-                    [f"{char} - Zone {zone} - Floor {level}" for level in range(1, 4)]
+                locations.append(
+                    RawCotNDLocationData(f"{shopkeeper} - {direction} Shop Item {round_index}", LocationType.SHOP, None,
+                                         DLC.BASE, None)
                 )
 
-                # Default boss for every character except Dove
-                if not char == "Dove":
-                    boss_label = f"{char} - Zone {zone} - Boss"
-                    zone_locations.append(boss_label)
-            else:
-                # Simple Zone X clear
-                    zone_locations.append(f"{char} - Zone {zone}")
+        round_index += 1
 
-            # Special-case bosses (added *in addition* to the regular one)
-            if zone == 4:
-                if char == "Cadence":
-                    zone_locations.append(f"{char} - Dead Ringer")
-                    zone_locations.append(f"{char} - NecroDancer")
-                elif char == "Melody":
-                    zone_locations.append(f"{char} - NecroDancer")
-            elif zone == 5 and char == "Nocturna":
-                zone_locations.append(f"{char} - Frankensteinway")
-                zone_locations.append(f"{char} - The Conductor")
-            elif zone == 1 and char == "Aria":
-                zone_locations.append(f"{char} - Golden Lute")
-
-    # Add All Zones clears
-    all_zone_locations = [f"{char} - All Zones" for char in chars]
-
-    return zone_locations, all_zone_locations
-
-# ==============================
-# Event Locations
-# ==============================
-
-def get_event_locations(dlcs: List[str], blacklist: List[str] | None = None, goals: List[int] | None = None) -> List[str]:
-    if goals is None:
-        goals = [0, 1]
-
-    dlcs = normalize_dlcs(dlcs)
-    chars = get_characters_for_dlcs(dlcs, blacklist)
-
-    all_zone_events = [f"{char} - Beat All Zones" for char in chars]
-    zone_events = [f"{char} - Beat Zone {zone}" for char in chars for zone in range(1, 6 if "amplified" in dlcs else 5)]
-
-    event_locations = []
-    if 0 in goals: event_locations += all_zone_events
-    if 1 in goals: event_locations += zone_events
-
-    return event_locations
-
-# ==============================
-# Extra Mode Clear Locations
-# ==============================
-
-EXTRA_MODES = {
-    "base": ["No Beat", "Double Tempo", "Low Percent"],
-    "amplified": ["Phasing", "Randomizer", "Mystery", "Hard", "No Return"],
-}
+    return locations
 
 
-def get_extra_mode_clear_locations(dlcs: List[str], blacklist: List[str] | None = None,
-                                   modes: List[str] | None = None) -> List[str]:
-    """Return extra mode clear locations for allowed modes."""
-    dlcs = normalize_dlcs(dlcs)
-    chars = get_characters_for_dlcs(dlcs, blacklist)
+def generate_codex_locations():
+    codex_locs = [
+        RawCotNDLocationData("Dragon Lore", LocationType.TUTORIAL, None, DLC.BASE, None),
+        RawCotNDLocationData("Trap Lore", LocationType.TUTORIAL, None, DLC.BASE, None),
+        RawCotNDLocationData("Bomb Lore", LocationType.TUTORIAL, None, DLC.BASE, None),
+        RawCotNDLocationData("How to Get Away with Murder", LocationType.TUTORIAL, None, DLC.BASE, None)
+    ]
 
-    available_modes = []
-    for dlc, dlc_modes in EXTRA_MODES.items():
-        if dlc == "base" or dlc in dlcs:
-            available_modes += dlc_modes
-
-    if modes:
-        available_modes = [m for m in available_modes if m in modes]
-    else:
-        return []
-
-    return [f"{char} - {mode}" for char in chars for mode in available_modes]
-
-
-# ==============================
-# Lobby NPC Locations
-# ==============================
-
-LOBBY_NPCS = ["Codex", "Merlin", "Hintmaster", "Janitor", "Diamond Dealer"]
-
-
-def get_codex_locations():
-    codex_locs = ["Dragon Lore", "Trap Lore", "Bomb Lore", "How to Get Away with Murder"]
     return codex_locs
 
-def get_lobby_npc_locations():
-    return [f"Caged {npc}" for npc in LOBBY_NPCS]
+
+def generate_npc_locations():
+    return [RawCotNDLocationData(f"Caged {npc}", LocationType.NPC, None, DLC.BASE, None) for npc in LOBBY_NPCS]
 
 
-# ==============================
-# Shop Locations
-# ==============================
+def generate_zone_clear_locations(characters: list[CotNDItemData]):
+    zone_count = 5
 
-def _get_normalized_distribution(dlcs: List[str]) -> Dict[str, int]:
-    """Compute normalized slot distribution across all shopkeepers and directions (9 total slots),
-       rotating extra slots across shopkeepers. Priority per shopkeeper: center > left > right."""
+    zone_locations: list[RawCotNDLocationData] = []
 
-    dlcs = normalize_dlcs(dlcs)
-    shopkeepers = [HEPHAESTUS, MERLIN, DUNGEON_MASTER]
+    for char in characters:
+        char_name = char.name
+        dlc = char.dlc
+        for zone in range(1, zone_count + 1):
+            zone_locations.extend(
+                [RawCotNDLocationData(f"{char_name} - Zone {zone} - Floor {floor}", LocationType.FLOOR, char_name,
+                                      dlc, zone) for floor in
+                 range(1, 4)]
+            )
 
-    # Apply DLC totals
-    totals = {s["name"]: apply_dlc_amounts(dlcs, s["location_amounts"]) for s in shopkeepers}
+            if not char_name == "Dove":
+                zone_locations.append(
+                    RawCotNDLocationData(f"{char_name} - Zone {zone} - Boss", LocationType.BOSS, char_name, dlc, zone))
+            zone_locations.append(
+                RawCotNDLocationData(f"{char_name} - Zone {zone}", LocationType.ZONE, char_name, dlc, zone))
 
-    # Total across ALL shopkeepers
-    grand_total = sum(sum(slots.values()) for slots in totals.values())
+            if zone == 4:
+                if char_name == "Cadence":
+                    zone_locations.append(
+                        RawCotNDLocationData(f"{char_name} - Dead Ringer", LocationType.UNIQUE_BOSS, char_name, dlc,
+                                             zone))
+                    zone_locations.append(
+                        RawCotNDLocationData(f"{char_name} - NecroDancer", LocationType.UNIQUE_BOSS, char_name, dlc,
+                                             zone))
+                elif char_name == "Melody":
+                    zone_locations.append(
+                        RawCotNDLocationData(f"{char_name} - NecroDancer", LocationType.UNIQUE_BOSS, char_name, dlc,
+                                             zone))
+            elif zone == 5 and char_name == "Nocturna":
+                zone_locations.append(
+                    RawCotNDLocationData(f"{char_name} - Frankensteinway", LocationType.UNIQUE_BOSS, char_name, dlc,
+                                         zone))
+                zone_locations.append(
+                    RawCotNDLocationData(f"{char_name} - The Conductor", LocationType.UNIQUE_BOSS, char_name, dlc,
+                                         zone))
+            elif zone == 1 and char_name == "Aria":
+                zone_locations.append(
+                    RawCotNDLocationData(f"{char_name} - Dead Ringer", LocationType.UNIQUE_BOSS, char_name, dlc, zone))
+                zone_locations.append(
+                    RawCotNDLocationData(f"{char_name} - Golden Lute", LocationType.UNIQUE_BOSS, char_name, dlc, zone))
 
-    # Normalize across 9 slots (3 shopkeepers × 3 directions)
-    base = grand_total // 9
-    remainder = grand_total % 9
+    zone_locations.extend(
+        [RawCotNDLocationData(f"{char.name} - All Zones", LocationType.ALL_ZONES, char.name, char.dlc, None) for char in
+         characters])
 
-    # Start with everyone getting base
-    distribution = {f"{s['name']} - {d}": base for s in shopkeepers for d in ["center", "left", "right"]}
-
-    # Build rotated priority order: center first for each shopkeeper in rotation, then left, then right
-    directions = ["center", "left", "right"]
-    priority_order = []
-
-    # For each direction, rotate shopkeepers
-    for direction in directions:
-        for i in range(len(shopkeepers)):
-            shopkeeper = shopkeepers[i % len(shopkeepers)]["name"]
-            priority_order.append(f"{shopkeeper} - {direction}")
-
-    # Hand out leftover slots in rotated order
-    for i in range(remainder):
-        distribution[priority_order[i % len(priority_order)]] += 1
-
-    return distribution
-
-
-def get_shop_locations(dlcs: List[str]) -> List[str]:
-    """Return all shop location names with normalized slot distribution."""
-    distribution = _get_normalized_distribution(dlcs)
-
-    shop_locations = []
-    for slot_key, count in distribution.items():
-        shopkeeper, direction = slot_key.split(" - ")
-        for i in range(1, count + 1):
-            shop_locations.append(f"{shopkeeper} - {direction.title()} Shop Item {i}")
-
-    return shop_locations
-
-
-def get_shop_slot_lengths(dlcs: List[str]) -> Dict[str, int]:
-    """Return normalized slot counts for each shop NPC and direction."""
-    return _get_normalized_distribution(dlcs)
-
-# ==============================
-# All Locations (full list)
-# ==============================
-
-def get_all_locations() -> List[LocationDict]:
-    """Return all possible locations across all DLCs, modes, shops, lobby NPCs."""
-    all_dlcs = DLCS[:]  # ["base", "amplified", "synchrony", "miku"]
-
-    # Zone clears. We run this twice to get the locs for both level clears and full zone clears.
-    zone_floor_locs, all_zone_locs = get_zone_clear_locations(all_dlcs)
-    zone_zone_locs, _ = get_zone_clear_locations(all_dlcs, None, False)
-
-    zone_locs = zone_floor_locs + zone_zone_locs
-
-    event_locs = get_event_locations(all_dlcs)
-    extra_modes = get_extra_mode_clear_locations(all_dlcs, [], EXTRA_MODES["base"] + EXTRA_MODES["amplified"])
-    shops = get_shop_locations(all_dlcs)
-    codex_locs = get_codex_locations()
-    lobby_npcs = get_lobby_npc_locations()
-
-    return build_location_dicts(shops + codex_locs + lobby_npcs + zone_locs + all_zone_locs + event_locs + extra_modes)
+    return zone_locations
 
 
-all_locations = {
-    location["name"]: location for location in get_all_locations()
-}
+def generate_extra_mode_locations(characters: list[CotNDItemData]):
+    locations: list[RawCotNDLocationData] = []
 
-def from_id(location_id: int) -> LocationDict:
-    matching = [loc for loc in all_locations.values() if loc['code'] == location_id]
-    if len(matching) == 0:
-        raise ValueError(f"No location data for location id '{location_id}'")
-    assert len(matching) < 2, f"Multiple location data with id '{location_id}. Please report."
-    return matching[0]
+    for mode_dlc, modes in EXTRA_MODES.items():
+        dlc_enum = DLC(mode_dlc)
+
+        for char in characters:
+            char_name = char.name
+
+            for mode in modes:
+                locations.append(
+                    RawCotNDLocationData(f"{char_name} - {mode}", LocationType.EXTRA_MODE, char_name, dlc_enum, None))
+
+    return locations
 
 
-# ==============================
-# Available Locations (per world/options)
-# ==============================
+def generate_event_locations(characters: list[CotNDItemData]):
+    all_zones: list[RawCotNDLocationData] = []
+    zones: list[RawCotNDLocationData] = []
+    for char in characters:
+        all_zones.append(
+            RawCotNDLocationData(f"{char.name} - Beat All Zones", LocationType.ALL_ZONES_EVENT, char.name, char.dlc,
+                                 None))
+        for zone in range(1, 6):
+            zones.append(
+                RawCotNDLocationData(f"{char.name} - Beat Zone {zone}", LocationType.ZONES_EVENT, char.name, char.dlc,
+                                     zone))
 
-def get_available_locations(
-        dlcs: List[str],
-        blacklist: List[str] | None = None,
-        goals: List[int] | None = None,
-        modes: List[str] | None = None,
-        include_lobby_npcs: bool = True,
-        include_codex_checks: bool = True,
-        per_level: bool = True,
-) -> List[LocationDict]:
-    """Return only available locations based on params (dlcs, blacklist, modes, lobby NPCs)."""
-    dlcs = normalize_dlcs(dlcs)
+    return all_zones + zones
 
-    # Zone clears
-    zone_locs, all_zone_locs = get_zone_clear_locations(dlcs, blacklist, per_level)
 
-    # Event Locations
-    event_locs = get_event_locations(dlcs, blacklist, goals)
+def load_all_locations():
+    characters = get_available_characters(None, {"Synchrony", "Amplified", "Miku", "Shovel Knight"})
 
-    # Extra modes
-    extra_modes = get_extra_mode_clear_locations(dlcs, blacklist, modes)
+    shop_locs = generate_shop_locations(TOTAL_SHOP_LOCATIONS)
+    npc_locations = generate_npc_locations()
+    codex_locs = generate_codex_locations()
+    zone_locs = generate_zone_clear_locations(characters)
+    extra_mode_locs = generate_extra_mode_locations(characters)
+    event_locs = generate_event_locations(characters)
 
-    # Shops
-    shops = get_shop_locations(dlcs)
+    all_locs = shop_locs + npc_locations + codex_locs + zone_locs + extra_mode_locs + event_locs
+    loaded: list[CotNDLocationData] = []
+    seen_names: Set[str] = set()
 
-    codex_locs = get_codex_locations() if include_codex_checks else []
+    index = 0
 
-    # Lobby NPCs
-    lobby_npcs = get_lobby_npc_locations() if include_lobby_npcs else []
+    for loc in all_locs:
+        if loc.name in seen_names:
+            raise ValueError(f"Duplicate location name: {loc.name}")
 
-    names = shops + codex_locs + lobby_npcs + zone_locs + (all_zone_locs if 0 in goals else []) + event_locs + extra_modes
+        seen_names.add(loc.name)
 
-    return [all_locations[location_name] for location_name in names]
+        loaded.append(
+            CotNDLocationData(
+                name=loc.name,
+                type=loc.type,
+                code=BASE_CODE + index if loc.type not in (
+                    LocationType.ALL_ZONES_EVENT, LocationType.ZONES_EVENT) else None,
+                character=loc.character,
+                dlc=loc.dlc,
+                zone=loc.zone
+            )
+        )
+        index += 1
+
+    return loaded
+
+
+ALL_LOCATIONS = load_all_locations()
+LOCATIONS_BY_NAME = {l.name: l for l in ALL_LOCATIONS}
+LOCATIONS_BY_CODE = {l.code: l for l in ALL_LOCATIONS}
+
+
+def location_from_name(name: str):
+    return LOCATIONS_BY_NAME[name]
+
+
+def location_from_code(code: int):
+    return LOCATIONS_BY_CODE[code]
+
+
+def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_blacklist: Set[str], goal: int,
+                       extra_modes: Set[str], codex_checks: bool, per_level: bool):
+    dlc_enums = normalize_dlc(dlc)
+    location_list = []
+
+    for location in ALL_LOCATIONS:
+        # We'll calculate shops locations afterward
+        if location.type is LocationType.SHOP:
+            continue
+
+        # Remove all locations associated with disabled dlc
+        if location.dlc is not DLC.BASE and location.dlc not in dlc_enums:
+            continue
+
+        # Remove all zone 5 locations if Amplified isn't enabled
+        if location.zone == 5 and DLC.AMPLIFIED not in dlc_enums:
+            continue
+
+        # Remove blacklisted characters
+        if location.character is not None and location.character in character_blacklist:
+            continue
+
+        # Remove All Zones checks if the goal is just zones
+        if goal == 1 and (location.type is LocationType.ALL_ZONES or location.type is LocationType.ALL_ZONES_EVENT):
+            continue
+        # Remove Zone events if the goal is All Zones
+        elif goal == 0 and location.type is LocationType.ZONES_EVENT:
+            continue
+
+        # Remove zone complete checks
+        if per_level:
+            if location.type is LocationType.ZONE:
+                continue
+        # Remove per-level checks
+        elif location.type is LocationType.FLOOR or location.type is LocationType.BOSS:
+            continue
+
+        # Remove checks not in extra_modes
+        if location.type is LocationType.EXTRA_MODE:
+            _, mode = location.name.split(" - ", 1)
+            if mode not in extra_modes:
+                continue
+
+        # Remove tutorial checks if disabled
+        if not codex_checks and location.type is LocationType.TUTORIAL:
+            continue
+
+        location_list.append(location)
+
+    # How many locations are still needed for items
+    missing_locations = len(item_list) - len(location_list)
+
+    # Minimum shop count based on enabled DLCs
+    min_shop_count = BASE_SHOP_COUNT
+
+    if DLC.AMPLIFIED in dlc_enums:
+        min_shop_count += AMP_SHOP_COUNT
+
+    if DLC.SYNCHRONY in dlc_enums:
+        min_shop_count += SYNC_SHOP_COUNT
+
+    # Final number of shop locations to include
+    shop_needed = max(min_shop_count, missing_locations)
+
+    # Inflate shop locations until unlock items fit
+    while True:
+        required_unlocks = max(math.ceil(shop_needed / (SHOPKEEPER_COUNT * 3)) - 1, 0)
+        free_locations = (len(location_list) + shop_needed) - len(item_list)
+
+        if free_locations >= required_unlocks or shop_needed > TOTAL_SHOP_LOCATIONS:
+            break
+
+        shop_needed += 1
+
+    if shop_needed > TOTAL_SHOP_LOCATIONS:
+        return ValueError("Shop Items needed exceed Shop Location count! Please inform the APWorld creator!")
+
+    # Pull shop locations in deterministic order, preserving codes
+    shop_locations = [loc for loc in ALL_LOCATIONS if loc.type is LocationType.SHOP][:shop_needed]
+
+    location_list.extend(shop_locations)
+
+    return location_list
+
+
+def get_last_shop_item_row(locations: list[CotNDLocationData]) -> int:
+    max_index = 0
+
+    for loc in locations:
+        if loc.type is not LocationType.SHOP:
+            continue
+
+        try:
+            index = int(loc.name.rsplit(" Shop Item ", 1)[1])
+            max_index = max(max_index, index)
+        except (IndexError, ValueError):
+            continue
+
+    return max_index
+
+
+def make_location_groups() -> dict[str, set[str]]:
+    groups: dict[str, set[str]] = defaultdict(set)
+
+    for location in ALL_LOCATIONS:
+        if location.type not in PLURALS:
+            continue
+        group_name = PLURALS[location.type]
+        groups[group_name].add(location.name)
+
+    return dict(groups)
+
+
+all_locations = ALL_LOCATIONS.copy()
+location_name_groups = make_location_groups()

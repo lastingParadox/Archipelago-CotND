@@ -1,49 +1,29 @@
-from typing import List, Set
-from .Items import ItemDict
+from typing import Set
 
-base_chars = [
-    "Cadence",
-    "Melody",
-    "Aria",
-    "Eli",
-    "Bolt",
-    "Dove",
-    "Bard",
-    "Monk",
-    "Reaper",
-    "Dorian",
-    "Coda"
-]
-
-amplified_chars = ["Nocturna", "Diamond", "Mary", "Tempo"]
-
-synchrony_chars = ["Chaunter", "Klarinetta", "Suzu"]
-
-miku_chars = ["Miku"]
-
-shovel_knight_chars = ["Shovel Knight"]
+from worlds.cotnd.Items import ItemType, all_items
+from worlds.cotnd.Utils import normalize_dlc, DLC
 
 
-def get_all_characters(dlcs: Set[str]):
-    all_chars = base_chars.copy()
-    if "Amplified" in dlcs:
-        all_chars += amplified_chars
-    if "Synchrony" in dlcs:
-        all_chars += synchrony_chars
-    if "Miku" in dlcs:
-        all_chars += miku_chars
-    if "Shovel Knight" in dlcs:
-        all_chars += shovel_knight_chars
+def get_available_characters(character_blacklist: Set[str] = None, dlc: Set[str] = None):
+    if character_blacklist is None:
+        character_blacklist = []
 
-    return all_chars
+    dlc_enums = normalize_dlc(dlc)
+    items_list = all_items.copy()
+
+    characters = []
+
+    for item in items_list:
+        if item.type != ItemType.CHARACTER:
+            continue
+        if item.dlc is not DLC.BASE and item.dlc not in dlc_enums:
+            continue
+        if item.name in character_blacklist:
+            continue
+
+        characters.append(item)
+
+    return characters
 
 
-def get_available_characters(items_list: List[ItemDict], dlcs: Set[str], blacklist: Set[str]):
-    all_chars = get_all_characters(dlcs)
-
-    return [
-        item for item in items_list
-        if item["type"] == "Character" and item["name"] in all_chars and item["name"] not in blacklist
-    ]
-
-all_chars = base_chars + amplified_chars + synchrony_chars + miku_chars
+all_chars = [char.name for char in get_available_characters(None, {"Amplified", "Synchrony", "Miku", "Shovel Knight"})]
