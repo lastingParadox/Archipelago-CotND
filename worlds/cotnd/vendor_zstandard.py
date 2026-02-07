@@ -12,7 +12,7 @@ def load_vendored_zstandard(bundle_path: str) -> None:
     and adds it to sys.path for runtime import.
 
     Handles:
-      - Windows/Linux
+      - Windows/Linux/MacOs
       - Python 3.11–3.13
       - Frozen apps and multiprocessing
       - Avoids .pyd locking issues by using unique extraction folders
@@ -23,10 +23,24 @@ def load_vendored_zstandard(bundle_path: str) -> None:
     py_tag = f"py{sys.version_info.major}{sys.version_info.minor}"
 
     system = platform.system()
+    machine = platform.machine().lower()
+
     if system == "Windows":
-        os_key = "win"
+        os_key = f"win_{py_tag}"
+
     elif system == "Linux":
-        os_key = "linux"
+        os_key = f"linux_{py_tag}"
+
+    elif system == "Darwin":
+        if machine in ("arm64", "aarch64"):
+            arch = "arm64"
+        elif machine in ("x86_64", "amd64"):
+            arch = "x86_64"
+        else:
+            raise RuntimeError(f"Unsupported macOS architecture: {machine}")
+
+        os_key = f"macos_{arch}_{py_tag}"
+
     else:
         raise RuntimeError(f"Unsupported platform: {system}")
 
