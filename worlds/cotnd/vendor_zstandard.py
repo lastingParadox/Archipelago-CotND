@@ -44,7 +44,7 @@ def load_vendored_zstandard(bundle_path: str) -> None:
     else:
         raise RuntimeError(f"Unsupported platform: {system}")
 
-    source_prefix = f"cotnd/vendor/zstandard/{os_key}_{py_tag}/zstandard/"
+    source_prefix = f"cotnd/vendor/zstandard/{os_key}/zstandard/"
 
     # Unique temp folder per process to avoid pyd locking issues
     extract_root = os.path.join(tempfile.gettempdir(), f"vendored_zstandard_{uuid.uuid4().hex}")
