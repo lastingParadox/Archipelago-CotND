@@ -9,7 +9,9 @@ import urllib.parse
 from typing import Dict, Set, Any
 
 import Utils
+from worlds.cotnd.Items import item_from_code
 from worlds.cotnd.vendor_zstandard import load_vendored_zstandard
+
 load_vendored_zstandard(os.path.join(Utils.user_path(), "custom_worlds", "cotnd.apworld"))
 
 import zstandard
@@ -18,9 +20,11 @@ import ModuleUpdate
 from CommonClient import ClientCommandProcessor, logger, CommonContext, get_base_parser
 from NetUtils import HintStatus, ClientStatus
 from Utils import init_logging
-from worlds.cotnd import all_locations
-from worlds.cotnd.Items import from_id as item_from_id
-from worlds.cotnd.Locations import from_id as location_from_id, shop_location_range
+from worlds.cotnd.Locations import (
+    location_from_name,
+    location_from_code,
+    LocationType,
+)
 
 ModuleUpdate.update()
 system = platform.system()
@@ -127,6 +131,7 @@ class CotNDContext(CommonContext):
             "msg": data.get("cause"),
             "source": data.get("source"),
         }))
+        super().on_deathlink(data)
 
     def on_package(self, cmd: str, args: Dict):
         try:
@@ -149,10 +154,10 @@ class CotNDContext(CommonContext):
                 indexed_items = []
 
                 for idx, netitem in enumerate(new_items, start=self.last_received_index):
-                    item_info = item_from_id(netitem.item)
+                    item_info = item_from_code(netitem.item)
                     indexed_items.append({
-                        "item": item_info["cotnd_id"],
-                        "item_name": item_info["name"],
+                        "item": item_info.cotnd_id,
+                        "item_name": item_info.name,
                         "location_code": str(netitem.location),
                         "location_name": self.location_names.lookup_in_slot(netitem.location, self.slot),
                         "playername": self.player_names[netitem.player],
@@ -190,18 +195,20 @@ class CotNDContext(CommonContext):
             # Sent when there is a need to update info about the present game session
             elif cmd == "RoomUpdate":
                 if args.get("checked_locations"):
-                    locations = [location_from_id(location_id)["name"] for location_id in args.get("checked_locations")]
+                    locations = [location_from_code(location_id).name for location_id in
+                                 args.get("checked_locations")]
                     asyncio.create_task(
                         self.cotnd_server.send_packet({"datatype": "Locations", "checked_locations": locations}))
+
 
             # Send to client when acknowledging LocationScouts packet, responding with item in location being scouted
             elif cmd == "LocationInfo":
                 locs = args.get("locations")
                 location_info = []
                 for loc in locs:
-                    location = location_from_id(loc.location)
+                    location = location_from_code(loc.location)
                     try:
-                        item = item_from_id(loc.item)
+                        item = item_from_code(loc.item)
                     except ValueError:
                         item = {
                             "name": self.item_names.lookup_in_slot(loc.item, loc.player),
@@ -213,15 +220,20 @@ class CotNDContext(CommonContext):
                             "code": loc.item
                         }
 
+                    source = "Hint"
+                    if location.type is LocationType.SHOP:
+                        source = "Shop"
+                    elif location.type is LocationType.TUTORIAL:
+                        source = "Tutorial"
+
                     location_info.append({
-                        "location": location["name"],
+                        "location": location.name,
                         "location_code": str(loc.location),
-                        "item": item["cotnd_id"],
+                        "item": item.cotnd_id,
                         "playername": self.player_names[loc.player],
-                        "itemname": item["name"],
+                        "itemname": item.name,
                         "flags": loc.flags,
-                        "source": "Shop" if shop_location_range["start"] <= loc.location <= shop_location_range[
-                            "end"] else "Hint"
+                        "source": source,
                     })
 
                 counts = {k: len(v) for k, v in self.location_hints_remaining.items()}
@@ -272,21 +284,21 @@ class CotNDContext(CommonContext):
 
                     state_packet = {
                         "datatype": "State",
-                        "deathlink": str("DeathLink" in self.tags),
+                        "deathlink": bool("DeathLink" in self.tags),
                         "location_hint_amounts": {k: len(v) for k, v in self.location_hints_remaining.items()},
                         "hint_cost": self.hint_cost,
                         "missing_locations": list(
-                            [location_from_id(location)["name"] for location in self.missing_locations]),
+                            [location_from_code(location).name for location in self.missing_locations]),
                         "checked_locations": list(
-                            [location_from_id(location)["name"] for location in self.checked_locations]),
+                            [location_from_code(location).name for location in self.checked_locations]),
                     }
 
                     items_list = []
                     for idx, net_item in enumerate(self.items_received):
-                        item = item_from_id(net_item.item)
+                        item = item_from_code(net_item.item)
                         items_list.append({
-                            "item": item["cotnd_id"],
-                            "item_name": item["name"],
+                            "item": item.cotnd_id,
+                            "item_name": item.name,
                             "location_code": str(net_item.location),
                             "location_name": self.location_names.lookup_in_slot(net_item.location, self.slot),
                             "playername": self.player_names[net_item.player],
@@ -301,10 +313,15 @@ class CotNDContext(CommonContext):
                         state_packet.update({
                             "goal": goal,
                             "goal_required": goal_required,
-                            "per_level_checks": True if self.slotdata.get("per_level_zone_clears") == 1 else False,
+                            "per_level_checks": False if self.slotdata.get("floor_clear_checks") == 0 else True,
                             "extra_modes": self.slotdata.get("included_extra_modes"),
                             "dlc": self.slotdata.get("dlc"),
                             "character_blacklist": self.slotdata.get("character_blacklist"),
+                            "character_unlocks": self.slotdata.get("character_unlocks"),
+                            "include_unique_items": self.slotdata.get("include_unique_items"),
+                            "zone_access_keys": self.slotdata.get("zone_access_keys"),
+                            "starting_zone": self.slotdata.get("starting_zone"),
+                            "lock_character_room": self.slotdata.get("lock_character_room"),
                             "caged_npc_locations": self.slotdata.get("caged_npc_locations"),
                             "pricing": {
                                 "type": self.slotdata.get("price_randomization"),
@@ -327,11 +344,17 @@ class CotNDContext(CommonContext):
                             },
                         })
 
-                        # Scout shop locations
+                        # Scout shop and codex tutorial locations on initial sync
                         await self.send_msgs([{
                             "cmd": "LocationScouts",
-                            "locations": [location_id for location_id in self.missing_locations if (
-                                    shop_location_range["start"] <= location_id <= shop_location_range["end"])]
+                            "locations": [
+                                location_id
+                                for location_id in self.missing_locations
+                                if (
+                                    location_from_code(location_id).type
+                                    in (LocationType.SHOP, LocationType.TUTORIAL)
+                                )
+                            ]
                         }])
 
                     await self.cotnd_server.send_packet(state_packet)
@@ -344,12 +367,11 @@ class CotNDContext(CommonContext):
                 case "Death":
                     print("Sending a death!", self.tags)
                     if "DeathLink" in self.tags:
-                        print("OOOGA!!!")
                         await self.send_death(data.get("msg"))
                 case "Locations":
                     locs = data.get("sources")
                     if locs is not None:
-                        resolved_ids = [all_locations[name]["code"] for name in locs if name in all_locations]
+                        resolved_ids = [location_from_name(name).code for name in locs]
                         self.locations_checked.update(resolved_ids)
                     await self.send_msgs([{"cmd": "LocationChecks", "locations": self.locations_checked}])
                 case "ScoutLocation":
@@ -478,8 +500,6 @@ class CotNDServer:
         # 2) Compress magicless
         # compress_magicless must produce magicless zstd frame
         compressed = self._zstd_cctx.compress(serialized)[4:]
-        print("COMPRESSED", compressed)
-
         # 3) Prefix length (big-endian uint32)
         header = struct.pack(">I", len(compressed))
 
@@ -606,7 +626,7 @@ class CotNDServer:
         if not self._server:
             return
 
-        with open(self.data_path + "/port.txt", "w") as f:
+        with open(self.data_path + "/port.txt", "w") as _:
             pass
 
         logger.info("[CotNDServer] Shutting down")
