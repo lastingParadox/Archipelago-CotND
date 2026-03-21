@@ -3,28 +3,64 @@ from typing import Mapping, Any
 
 from BaseClasses import Tutorial, Region, ItemClassification, MultiWorld
 from worlds.AutoWorld import WebWorld, World
-from worlds.LauncherComponents import launch_subprocess, icon_paths, components, Component, Type
+from worlds.LauncherComponents import (
+    launch_subprocess,
+    icon_paths,
+    components,
+    Component,
+    Type,
+)
 from worlds.cotnd.Characters import get_available_characters
-from worlds.cotnd.Items import all_items, item_name_groups, get_shop_stock_unlocks, get_filler_items, \
-    CotNDItem, ItemType, CotNDItemData, build_master_world_items, filter_population_list
-from worlds.cotnd.Locations import all_locations, location_name_groups, get_locations_list, get_last_shop_item_row, \
-    LocationType, CotNDLocation
+from worlds.cotnd.Items import (
+    all_items,
+    item_name_groups,
+    get_shop_stock_unlocks,
+    get_filler_items,
+    CotNDItem,
+    ItemType,
+    CotNDItemData,
+    build_master_world_items,
+    filter_population_list,
+)
+from worlds.cotnd.Locations import (
+    all_locations,
+    location_name_groups,
+    get_locations_list,
+    get_last_shop_item_row,
+    LocationType,
+    CotNDLocation,
+)
 from worlds.cotnd.Options import CotNDOptions
 from worlds.cotnd.Regions import cotnd_regions, get_regions_to_locations
 from worlds.cotnd.Rules import set_rules
 from worlds.cotnd.Utils import assign_caged_npcs, LOBBY_NPCS
-from worlds.cotnd.Validation import validate_blacklist, validate_modes, cap_option, validate_price_ranges, \
-    collect_starting_pool, validate_starting_character, collect_starting_character
+from worlds.cotnd.Validation import (
+    validate_blacklist,
+    validate_modes,
+    cap_option,
+    validate_price_ranges,
+    validate_starting_zone,
+    collect_starting_pool,
+    validate_starting_character,
+    collect_starting_character,
+)
 
 
 def launch_client():
     from .Client import launch
+
     launch_subprocess(launch, name="CotNDClient")
 
 
 icon_paths["cotnd_ico"] = f"ap:{__name__}/data/icon.png"
 components.append(
-    Component("Crypt of the NecroDancer Client", func=launch_client, component_type=Type.CLIENT, icon="cotnd_ico"))
+    Component(
+        "Crypt of the NecroDancer Client",
+        func=launch_client,
+        component_type=Type.CLIENT,
+        icon="cotnd_ico",
+    )
+)
 
 
 class CotNDWeb(WebWorld):
@@ -71,6 +107,8 @@ class CotNDWorld(World):
     items = {}
     locations = {}
     caged_npc_locations = {}
+    starting_zone: int = 1
+    starting_character_name: str = ""
 
     def generate_early(self):
         self.dlcs = set([item.lower() for item in self.options.dlc.value])
@@ -78,16 +116,80 @@ class CotNDWorld(World):
         blacklist = validate_blacklist(self.options, self.dlcs)
         included_modes = validate_modes(self.options, self.dlcs)
 
-        (self.world_item_list,
-         self.item_from_name,
-         self.item_from_code) = build_master_world_items(blacklist, self.dlcs, included_modes,
-                                                         bool(self.options.include_unique_items),
-                                                         self.options.character_unlocks.current_key)
+        (self.world_item_list, self.item_from_name, self.item_from_code) = (
+            build_master_world_items(
+                blacklist,
+                self.dlcs,
+                included_modes,
+                bool(self.options.include_unique_items),
+                self.options.character_unlocks.current_key,
+            )
+        )
         self.items = filter_population_list(self.world_item_list)
 
-        self.locations = get_locations_list(self.items, self.dlcs, blacklist, self.options.goal.value, included_modes,
-                                            bool(self.options.include_codex_checks.value),
-                                            bool(self.options.floor_clear_checks.value))
+        # Determine zone key precollection early so we can remove them BEFORE location generation
+        zone_key_mode = self.options.zone_access_keys.current_key
+        max_zone = 5 if "amplified" in self.dlcs else 4
+        starting_zone = min(self.options.starting_zone.value, max_zone)
+        self.starting_zone = starting_zone
+        
+        # Precollect starting zone keys NOW (before location generation)
+        if zone_key_mode != "disabled":
+            if zone_key_mode == "separate":
+                self.multiworld.push_precollected(
+                    self.create_item(f"Zone {starting_zone} Access")
+                )
+            else:  # progressive
+                precollect_count = max(0, starting_zone - 1)
+                for _ in range(precollect_count):
+                    self.multiworld.push_precollected(
+                        self.create_item("Progressive Zone Access")
+                    )
+
+        # Add zone access keys to item pool for location generation count
+        # Add ALL copies so location generation counts them properly
+        zone_key_items = []
+        if zone_key_mode != "disabled":
+            if zone_key_mode == "separate":
+                for zone in range(1, max_zone + 1):
+                    zone_key_items.append(self.item_from_name[f"Zone {zone} Access"])
+            else:  # progressive
+                # One progressive key unlocks one zone step (Zone 1->2, ..., max_zone-1->max_zone)
+                for _ in range(max(0, max_zone - 1)):
+                    zone_key_items.append(self.item_from_name["Progressive Zone Access"])
+        
+        if self.options.lock_character_room:
+            zone_key_items.append(self.item_from_name["Character Room Key"])
+        
+        self.items.extend(zone_key_items)
+
+        self.locations = get_locations_list(
+            self.items,
+            self.dlcs,
+            blacklist,
+            self.options.goal.value,
+            included_modes,
+            bool(self.options.include_codex_checks.value),
+            bool(self.options.floor_clear_checks.value),
+        )
+
+        # NOW remove the precollected zone keys from the pool (after location generation)
+        # This way fill algorithm gets the right number of items to place
+        if zone_key_mode == "separate":
+            # Remove the starting zone's access key (it was precollected)
+            self.items = [item for item in self.items if not (item.name == f"Zone {starting_zone} Access")]
+        elif zone_key_mode == "progressive":
+            # Remove precollected copies of Progressive Zone Access
+            # Count how many to remove based on name alone (avoiding object identity issues)
+            count_to_remove = max(0, starting_zone - 1)
+            kept_items = []
+            removed_count = 0
+            for item in self.items:
+                if item.name == "Progressive Zone Access" and removed_count < count_to_remove:
+                    removed_count += 1
+                else:
+                    kept_items.append(item)
+            self.items = kept_items
 
         shop_index = get_last_shop_item_row(self.locations)
         self.items = get_shop_stock_unlocks(self.items, shop_index)
@@ -96,17 +198,31 @@ class CotNDWorld(World):
 
         # Cap certain values
         cap_option(self.options, "all_zones_goal_clear", len(self.chars))
-        cap_option(self.options, "zones_goal_clear",
-                   len(self.chars) * (5 if "Amplified" in self.options.dlc.value else 4))
+        cap_option(
+            self.options,
+            "zones_goal_clear",
+            len(self.chars) * (5 if "Amplified" in self.options.dlc.value else 4),
+        )
 
         validate_price_ranges(self.options)
+        validate_starting_zone(self.options, self.dlcs)
 
-        self.items = collect_starting_pool(self, self.items, self.options.starting_inventory.value,
-                                           bool(self.options.include_materials.value))
+        self.items = collect_starting_pool(
+            self,
+            self.items,
+            self.options.starting_inventory.value,
+            bool(self.options.include_materials.value),
+        )
 
         # Give starting characters
-        collect_starting_character(self, self.items, self.options.starting_character.current_option_name,
-                                   self.options.character_unlocks.value)
+        self.items, self.starting_character_name = collect_starting_character(
+            self,
+            self.items,
+            self.options.starting_character.current_option_name,
+            self.options.character_unlocks.value,
+        )
+
+        # Character Room Key should already be in pool if enabled; no further action needed
 
         # Randomize Lobby NPC placement
         self.caged_npc_locations = assign_caged_npcs(self.random, self.dlcs)
@@ -114,7 +230,9 @@ class CotNDWorld(World):
     def create_regions(self):
         regions = cotnd_regions
         for region_name in regions.keys():
-            self.multiworld.regions.append(Region(region_name, self.player, self.multiworld))
+            self.multiworld.regions.append(
+                Region(region_name, self.player, self.multiworld)
+            )
 
         regions_to_loc = get_regions_to_locations(self.locations)
 
@@ -122,22 +240,35 @@ class CotNDWorld(World):
             region = self.get_region(region_name)
             region.add_exits(region_connections)
             region.add_locations(
-                {location.name: location.code for location in regions_to_loc[region_name]}, CotNDLocation)
+                {
+                    location.name: location.code
+                    for location in regions_to_loc[region_name]
+                },
+                CotNDLocation,
+            )
 
     def create_items(self):
         for character in self.chars:
             if self.options.goal == "all_zones":
-                self.get_location(f"{character.name} - Beat All Zones").place_locked_item(self.create_event("Complete"))
+                self.get_location(
+                    f"{character.name} - Beat All Zones"
+                ).place_locked_item(self.create_event("Complete"))
             elif self.options.goal == "zones":
                 for i in range(1, 6 if "Amplified" in self.dlcs else 5):
-                    self.get_location(f"{character.name} - Beat Zone {i}").place_locked_item(
-                        self.create_event("Complete"))
+                    self.get_location(
+                        f"{character.name} - Beat Zone {i}"
+                    ).place_locked_item(self.create_event("Complete"))
 
         # Lock Lobby NPC items to locations
         if not self.options.lobby_npc_items:
+            locked_npcs = set(LOBBY_NPCS)
+            # Remove NPCs that are being hard-locked so they are not also shuffled in the item pool.
+            self.items = [item for item in self.items if item.name not in locked_npcs]
             for npc in LOBBY_NPCS:
                 item = self.item_from_name[npc]
-                self.get_location(f"Caged {npc}").place_locked_item(self.create_item(item.name))
+                self.get_location(f"Caged {npc}").place_locked_item(
+                    self.create_item(item.name)
+                )
 
         unfilled_locations = len(self.multiworld.get_unfilled_locations(self.player))
         needed_filler = unfilled_locations - len(self.items)
@@ -157,11 +288,26 @@ class CotNDWorld(World):
         return CotNDItem(event, ItemClassification.progression, None, self.player)
 
     def set_rules(self) -> None:
-        goal_clear_req = self.options.all_zones_goal_clear.value if self.options.goal == "all_zones" else self.options.zones_goal_clear.value
+        goal_clear_req = (
+            self.options.all_zones_goal_clear.value
+            if self.options.goal == "all_zones"
+            else self.options.zones_goal_clear.value
+        )
 
-        set_rules(self.multiworld, self.player, self.locations, self.item_from_name, goal_clear_req,
-                  self.options.character_unlocks.current_key,
-                  bool(self.options.include_unique_items.value))
+        set_rules(
+            self.multiworld,
+            self.player,
+            self.locations,
+            self.item_from_name,
+            goal_clear_req,
+            self.options.character_unlocks.current_key,
+            bool(self.options.include_unique_items.value),
+            zone_access_keys=self.options.zone_access_keys.current_key,
+            starting_zone=self.starting_zone,
+            lock_character_room=bool(self.options.lock_character_room.value),
+            starting_character=self.starting_character_name,
+            caged_npc_locations=self.caged_npc_locations,
+        )
 
     def post_fill(self):
         hint_name_map = {
@@ -183,9 +329,10 @@ class CotNDWorld(World):
         for sphere in self.multiworld.get_spheres():
             for location in sphere:
                 loc_item = location.item
-                if (loc_item.game != "Crypt of the NecroDancer"
-                        or loc_item.player != self.player
-                        or loc_item.code is None
+                if (
+                    loc_item.game != "Crypt of the NecroDancer"
+                    or loc_item.player != self.player
+                    or loc_item.code is None
                 ):
                     continue
 
@@ -215,12 +362,16 @@ class CotNDWorld(World):
             "useful_price_min",
             "useful_price_max",
             "progression_price_min",
-            "progression_price_max"
+            "progression_price_max",
+            "zone_access_keys",
+            "lock_character_room",
         )
 
         # fill["item_by_code"] = self.item_from_code
         fill["caged_npc_locations"] = self.caged_npc_locations
         fill["location_hint_codes"] = self.location_hint_codes[self.player_name]
+        fill["starting_zone"] = self.starting_zone
+        fill["starting_character"] = self.starting_character_name
 
         return fill
 

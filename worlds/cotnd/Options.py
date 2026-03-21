@@ -3,7 +3,14 @@ from Options import (
     DeathLinkMixin,
     PerGameCommonOptions,
     Range,
-    OptionList, Choice, OptionGroup, DefaultOnToggle, Toggle, OptionCounter, OptionSet, NamedRange,
+    OptionList,
+    Choice,
+    OptionGroup,
+    DefaultOnToggle,
+    Toggle,
+    OptionCounter,
+    OptionSet,
+    NamedRange,
 )
 from worlds.cotnd.Characters import all_chars
 
@@ -15,7 +22,7 @@ all_game_modes = [
     "Mystery",
     "No Beat",
     "Double Tempo",
-    "Low Percent"
+    "Low Percent",
 ]
 
 
@@ -24,6 +31,7 @@ class Goal(Choice):
     All_Zones: Clear ALl Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear". Recommended for experienced players, as this can be challenging.
     Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks. Recommended for a quicker and less challenging experience.
     """
+
     display_name = "Goal"
     option_All_Zones = 0
     option_Zones = 1
@@ -32,7 +40,8 @@ class Goal(Choice):
 
 class AllZonesGoalClear(Range):
     """Determines how many character completions are required for the All Zones goal. Default is 6.
-    Note: If this value exceeds the number of characters in the pool, then this value will equal that number."""
+    Note: If this value exceeds the number of characters in the pool, then this value will equal that number.
+    """
 
     display_name = "Characters Required for All Zones Goal"
     range_start = 1
@@ -42,7 +51,8 @@ class AllZonesGoalClear(Range):
 
 class ZonesGoalClear(Range):
     """Determines how many separate zone completions are required for the Zones goal. Default is 30.
-    Note: If this value exceeds the number of zones in the pool, then this value will equal that number."""
+    Note: If this value exceeds the number of zones in the pool, then this value will equal that number.
+    """
 
     display_name = "Amount required for Zones Goal"
     range_start = 1
@@ -80,11 +90,7 @@ class StartingInventory(NamedRange):
 
     range_start = 0
     range_end = 100
-    special_range_names = {
-        "vanilla": 100,
-        "reduced": 50,
-        "minimum": 0
-    }
+    special_range_names = {"vanilla": 100, "reduced": 50, "minimum": 0}
     default = 50
 
 
@@ -124,7 +130,8 @@ class StartingCharacter(Choice):
 class CharacterBlacklist(OptionSet):
     """Which characters to exclude from checks and progression. Note that this will disable the character from the run entirely if included.
     Options include: Cadence, Melody, Aria, Nocturna, Eli, Bolt, Diamond, Chaunter, Dove, Bard, Mary, Suzu, Monk, Reaper, Tempo, Dorian, Coda, Klarinetta, Hatsune Miku, Shovel Knight
-    Note: If this list consists of all available characters, then Cadence will be removed from the blacklist to prevent progression issues."""
+    Note: If this list consists of all available characters, then Cadence will be removed from the blacklist to prevent progression issues.
+    """
 
     display_name = "Character Blacklist"
     valid_keys = frozenset(all_chars)
@@ -133,9 +140,10 @@ class CharacterBlacklist(OptionSet):
 
 class CharacterUnlocks(Choice):
     """How characters should be unlocked in the multiworld. All options will require a character item at the very minimum. Default is Item_Only.
-    Item_Only: Only the character item is required to use and play as a character.
-    Required_Items_Soft: The character item unlocks the character. Certain characters will be accessible without their required items until they are unlocked.
-    Required_Items_Hard: The character item and the character's required items unlock the character. Characters are not accessible until their required items are unlocked."""
+    Item_Only: Only the character item is required to unlock a character.
+    Required_Items_Soft: The character item (and unique items if enabled) unlocks in-game access to a character. Logic still requires the character's required items.
+    Required_Items_Hard: The character item and all required items (and unique item if Include Unique Equipment is enabled) must be received before in-game access to a character is granted.
+    """
 
     display_name = "Character Unlocks"
     option_Item_Only = 0
@@ -146,14 +154,16 @@ class CharacterUnlocks(Choice):
 
 class IncludeUniqueEquipment(Toggle):
     """Whether to include character-specific equipment in the multiworld and in level generation. Default is false.
-    If set to true and Character Unlocks is set to either Required_Items_Soft or Required_Items_Hard, the characters who have unique items will require them."""
+    If set to true and Character Unlocks is set to either Required_Items_Soft or Required_Items_Hard, the characters who have unique items will require them.
+    """
 
     display_name = "Include Unique Equipment"
 
 
 class IncludeMaterials(Toggle):
     """Whether to include weapon materials/shapes in the multiworld and in level generation. Default is false.
-    If set to true, weapons will only spawn with their base material until you unlock the associated material item."""
+    If set to true, weapons will only spawn with their base material until you unlock the associated material item.
+    """
 
     display_name = "Include Materials"
 
@@ -161,7 +171,8 @@ class IncludeMaterials(Toggle):
 class IncludedExtraModes(OptionList):
     """Which game modes to include in checks. Note that this will disable the mode from the run entirely if excluded.
     Options include: No Return (Amplified), Hard (Amplified), Phasing (Amplified), Randomizer (Amplified), Mystery (Amplified), No Beat, Double Tempo, and Low Percent.
-    Note: If you do not have the Amplified DLC enabled, the modes that require it will be disabled."""
+    Note: If you do not have the Amplified DLC enabled, the modes that require it will be disabled.
+    """
 
     display_name = "Included Extra Modes"
     valid_keys = frozenset(all_game_modes)
@@ -178,6 +189,49 @@ class LobbyNPCItems(Toggle):
     """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead of unlocking their room."""
 
     display_name = "Lobby NPC Items"
+
+
+class ZoneAccessKeys(Choice):
+    """Controls whether zones are locked behind Zone Access Key items.
+    Disabled: Zones have no access requirements.
+    Separate: Each zone has its own distinct access key shuffled into the pool. The Starting Zone is
+    freely accessible from the start; all other zones require their unique key.
+    Progressive: A single Progressive Zone Access item is used. Each copy found unlocks the next zone
+    in sequence (Zone 1 requires 0, Zone 2 requires 1, etc.). The Starting Zone determines how many
+    copies are precollected at the start.
+    Default is Disabled."""
+
+    display_name = "Zone Access Keys"
+    option_disabled = 0
+    option_separate = 1
+    option_progressive = 2
+    default = 0
+
+
+class StartingZone(Choice):
+    """When Zone Access Keys are Separate or Progressive, sets the starting accessible zone.
+    Separate: the starting zone requires no key; all other zones need their unique key.
+    Progressive: Starting Zone minus one Progressive Zone Access items are precollected, granting
+    immediate access to all zones up to and including the starting zone.
+    Zone 5 is only valid with Amplified enabled; otherwise pre-generation validation forces Zone 4.
+    Has no effect when Zone Access Keys is Disabled. Default is Zone 1."""
+
+    display_name = "Starting Zone"
+    option_zone_1 = 1
+    option_zone_2 = 2
+    option_zone_3 = 3
+    option_zone_4 = 4
+    option_zone_5 = 5
+    default = 1
+
+
+class LockCharacterRoom(Toggle):
+    """When enabled, a Character Room Key item must be received before you can switch away from your
+    starting character. This creates an early-game chokepoint, restricting all runs to your starting
+    character until the key is found.
+    Default is false."""
+
+    display_name = "Lock Character Room"
 
 
 class PriceRandomization(Choice):
@@ -200,6 +254,7 @@ class TrapPercentage(Range):
     """
     Replaces filler items with traps, at the specified rate.
     """
+
     display_name = "Trap Percentage"
     range_start = 0
     range_end = 100
@@ -216,7 +271,7 @@ _default_trap_weights = {
     "Monkey Trap": 10,
     "No Return Trap": 3,
     "Skeleton Trap": 5,
-    "Tempo Trap": 7
+    "Tempo Trap": 7,
 }
 
 
@@ -226,6 +281,7 @@ class TrapWeights(OptionCounter):
     If you don't want a specific type of trap, you can set the weight for it to 0.
     If you set all trap weights to 0, you will get no traps, bypassing the "Trap Percentage" option.
     """
+
     display_name = "Trap Weights"
     valid_keys = _default_trap_weights.keys()
 
@@ -322,6 +378,9 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     included_extra_modes: IncludedExtraModes
     include_codex_checks: IncludeCodexChecks
     lobby_npc_items: LobbyNPCItems
+    zone_access_keys: ZoneAccessKeys
+    starting_zone: StartingZone
+    lock_character_room: LockCharacterRoom
     trap_percentage: TrapPercentage
     trap_weights: TrapWeights
     price_randomization: PriceRandomization
@@ -336,31 +395,40 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
 
 
 option_groups = [
-    OptionGroup("Goal Options", [
-        Goal,
-        AllZonesGoalClear,
-        ZonesGoalClear,
-        FloorClearChecks
-    ]),
-    OptionGroup("Character Options", [
-        StartingCharacter,
-        CharacterBlacklist,
-        CharacterUnlocks,
-        IncludeUniqueEquipment
-    ]),
-    OptionGroup("Trap Options", [
-        TrapPercentage,
-        TrapWeights
-    ]),
-    OptionGroup("Pricing Options", [
-        PriceRandomization,
-        RandomizedPriceMin,
-        RandomizedPriceMax,
-        FillerPriceMin,
-        FillerPriceMax,
-        UsefulPriceMin,
-        UsefulPriceMax,
-        ProgressionPriceMin,
-        ProgressionPriceMax
-    ])
+    OptionGroup(
+        "Goal Options",
+        [
+            Goal,
+            AllZonesGoalClear,
+            ZonesGoalClear,
+            FloorClearChecks,
+            ZoneAccessKeys,
+            StartingZone,
+        ],
+    ),
+    OptionGroup(
+        "Character Options",
+        [
+            StartingCharacter,
+            CharacterBlacklist,
+            CharacterUnlocks,
+            IncludeUniqueEquipment,
+            LockCharacterRoom,
+        ],
+    ),
+    OptionGroup("Trap Options", [TrapPercentage, TrapWeights]),
+    OptionGroup(
+        "Pricing Options",
+        [
+            PriceRandomization,
+            RandomizedPriceMin,
+            RandomizedPriceMax,
+            FillerPriceMin,
+            FillerPriceMax,
+            UsefulPriceMin,
+            UsefulPriceMax,
+            ProgressionPriceMin,
+            ProgressionPriceMax,
+        ],
+    ),
 ]

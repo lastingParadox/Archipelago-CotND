@@ -375,7 +375,7 @@ scrolls: list[RawCotNDItemData] = [
                      DefaultType.NEVER),
     RawCotNDItemData("Pulse Scroll", ItemClassification.useful, ItemType.SCROLL, "ScrollPulse", DLC.BASE,
                      DefaultType.POSSIBLE),
-    RawCotNDItemData("Berserk Scroll", ItemClassification.useful, ItemType.SCROLL, "ScrollBerzerk", DLC.SYNCHRONY,
+    RawCotNDItemData("Berzerk Scroll", ItemClassification.useful, ItemType.SCROLL, "Sync_ScrollBerzerk", DLC.SYNCHRONY,
                      DefaultType.POSSIBLE),
     RawCotNDItemData("Earthquake Scroll", ItemClassification.useful, ItemType.SCROLL, "ScrollEarthquake", DLC.BASE,
                      DefaultType.NEVER),
@@ -515,7 +515,21 @@ upgrades: list[RawCotNDItemData] = [
     RawCotNDItemData("Permanent Health Upgrade", ItemClassification.useful, ItemType.UPGRADE, "PermHeart2",
                      DLC.BASE, DefaultType.NEVER),
     RawCotNDItemData("Shop Stock Unlock", ItemClassification.progression, ItemType.UPGRADE, "APShopStock", DLC.BASE,
-                     DefaultType.NEVER)
+                     DefaultType.NEVER),
+    RawCotNDItemData("Zone 1 Access", ItemClassification.progression, ItemType.UPGRADE, "APZone1Access", DLC.BASE,
+                     DefaultType.NEVER),
+    RawCotNDItemData("Zone 2 Access", ItemClassification.progression, ItemType.UPGRADE, "APZone2Access", DLC.BASE,
+                     DefaultType.NEVER),
+    RawCotNDItemData("Zone 3 Access", ItemClassification.progression, ItemType.UPGRADE, "APZone3Access", DLC.BASE,
+                     DefaultType.NEVER),
+    RawCotNDItemData("Zone 4 Access", ItemClassification.progression, ItemType.UPGRADE, "APZone4Access", DLC.BASE,
+                     DefaultType.NEVER),
+    RawCotNDItemData("Zone 5 Access", ItemClassification.progression, ItemType.UPGRADE, "APZone5Access", DLC.AMPLIFIED,
+                     DefaultType.NEVER),
+    RawCotNDItemData("Progressive Zone Access", ItemClassification.progression, ItemType.UPGRADE, "APProgressiveZoneAccess",
+                     DLC.BASE, DefaultType.NEVER),
+    RawCotNDItemData("Character Room Key", ItemClassification.progression, ItemType.UPGRADE, "APCharRoomKey", DLC.BASE,
+                     DefaultType.NEVER),
 ]
 
 filler: list[RawCotNDItemData] = [
@@ -694,16 +708,29 @@ def build_master_world_items(
     return result, item_from_name_map, item_from_code_map
 
 
+# Items managed outside the standard population pipeline and added conditionally
+AP_SYSTEM_ITEMS: frozenset[str] = frozenset({
+    "Shop Stock Unlock",
+    "Zone 1 Access",
+    "Zone 2 Access",
+    "Zone 3 Access",
+    "Zone 4 Access",
+    "Zone 5 Access",
+    "Progressive Zone Access",
+    "Character Room Key",
+})
+
+
 def filter_population_list(item_list: list[CotNDItemData]):
     filtered_list = []
 
     for item in item_list:
-        # Exclude filler/trap item:
+        # Exclude filler/trap items
         if item.type is ItemType.FILLER or item.type is ItemType.TRAP:
             continue
 
-        # We will manually add Shop Stock Unlock Items after retrieving locations
-        if item.name == "Shop Stock Unlock":
+        # Exclude items that are added to the pool conditionally based on options
+        if item.name in AP_SYSTEM_ITEMS:
             continue
 
         filtered_list.append(item)

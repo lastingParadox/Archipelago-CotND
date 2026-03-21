@@ -20,7 +20,11 @@ import ModuleUpdate
 from CommonClient import ClientCommandProcessor, logger, CommonContext, get_base_parser
 from NetUtils import HintStatus, ClientStatus
 from Utils import init_logging
-from worlds.cotnd.Locations import location_from_name, location_from_code, SHOP_LOCATION_RANGE
+from worlds.cotnd.Locations import (
+    location_from_name,
+    location_from_code,
+    LocationType,
+)
 
 ModuleUpdate.update()
 system = platform.system()
@@ -127,6 +131,7 @@ class CotNDContext(CommonContext):
             "msg": data.get("cause"),
             "source": data.get("source"),
         }))
+        super().on_deathlink(data)
 
     def on_package(self, cmd: str, args: Dict):
         try:
@@ -215,6 +220,12 @@ class CotNDContext(CommonContext):
                             "code": loc.item
                         }
 
+                    source = "Hint"
+                    if location.type is LocationType.SHOP:
+                        source = "Shop"
+                    elif location.type is LocationType.TUTORIAL:
+                        source = "Tutorial"
+
                     location_info.append({
                         "location": location.name,
                         "location_code": str(loc.location),
@@ -222,8 +233,7 @@ class CotNDContext(CommonContext):
                         "playername": self.player_names[loc.player],
                         "itemname": item.name,
                         "flags": loc.flags,
-                        "source": "Shop" if SHOP_LOCATION_RANGE["start"] <= loc.location <= SHOP_LOCATION_RANGE[
-                            "end"] else "Hint"
+                        "source": source,
                     })
 
                 counts = {k: len(v) for k, v in self.location_hints_remaining.items()}
@@ -309,6 +319,9 @@ class CotNDContext(CommonContext):
                             "character_blacklist": self.slotdata.get("character_blacklist"),
                             "character_unlocks": self.slotdata.get("character_unlocks"),
                             "include_unique_items": self.slotdata.get("include_unique_items"),
+                            "zone_access_keys": self.slotdata.get("zone_access_keys"),
+                            "starting_zone": self.slotdata.get("starting_zone"),
+                            "lock_character_room": self.slotdata.get("lock_character_room"),
                             "caged_npc_locations": self.slotdata.get("caged_npc_locations"),
                             "pricing": {
                                 "type": self.slotdata.get("price_randomization"),
@@ -331,11 +344,17 @@ class CotNDContext(CommonContext):
                             },
                         })
 
-                        # Scout shop locations
+                        # Scout shop and codex tutorial locations on initial sync
                         await self.send_msgs([{
                             "cmd": "LocationScouts",
-                            "locations": [location_id for location_id in self.missing_locations if (
-                                    SHOP_LOCATION_RANGE["start"] <= location_id <= SHOP_LOCATION_RANGE["end"])]
+                            "locations": [
+                                location_id
+                                for location_id in self.missing_locations
+                                if (
+                                    location_from_code(location_id).type
+                                    in (LocationType.SHOP, LocationType.TUTORIAL)
+                                )
+                            ]
                         }])
 
                     await self.cotnd_server.send_packet(state_packet)
