@@ -72,10 +72,10 @@ class CotNDCommandProcessor(ClientCommandProcessor):
             death_link_enabled = "DeathLink" not in self.ctx.tags
             asyncio.create_task(self.ctx.update_death_link(death_link_enabled), name="Update Deathlink")
             logger.info(f"Deathlink {'enabled' if death_link_enabled else 'disabled'}")
-            self.ctx.cotnd_server.send_packet({
+            asyncio.create_task(self.ctx.cotnd_server.send_packet({
                 "datatype": "SetDeathLink",
                 "deathlink": death_link_enabled
-            })
+            }))
 
 
 class CotNDContext(CommonContext):
@@ -142,6 +142,7 @@ class CotNDContext(CommonContext):
             elif cmd == "Connected":
                 self.connected_to_ap = True
                 self.slotdata = args.get("slot_data")
+                asyncio.create_task(self.update_death_link(self.slotdata.get("death_link", False)))
                 logger.info("[CotNDServer] Starting server...")
                 asyncio.create_task(
                     self.cotnd_server.start(),
