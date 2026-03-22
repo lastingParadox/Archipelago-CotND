@@ -201,7 +201,7 @@ class CotNDWorld(World):
         cap_option(
             self.options,
             "zones_goal_clear",
-            len(self.chars) * (5 if "Amplified" in self.options.dlc.value else 4),
+            len(self.chars) * (5 if "amplified" in self.options.dlc.value else 4),
         )
 
         validate_price_ranges(self.options)
@@ -254,7 +254,7 @@ class CotNDWorld(World):
                     f"{character.name} - Beat All Zones"
                 ).place_locked_item(self.create_event("Complete"))
             elif self.options.goal == "zones":
-                for i in range(1, 6 if "Amplified" in self.dlcs else 5):
+                for i in range(1, 6 if "amplified" in self.dlcs else 5):
                     self.get_location(
                         f"{character.name} - Beat Zone {i}"
                     ).place_locked_item(self.create_event("Complete"))

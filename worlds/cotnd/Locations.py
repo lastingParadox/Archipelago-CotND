@@ -313,7 +313,7 @@ def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_
         shop_needed += 1
 
     if shop_needed > TOTAL_SHOP_LOCATIONS:
-        return ValueError("Shop Items needed exceed Shop Location count! Please inform the APWorld creator!")
+        raise ValueError("Shop Items needed exceed Shop Location count! Please inform the APWorld creator!")
 
     # Pull shop locations in deterministic order, preserving codes
     shop_locations = [loc for loc in ALL_LOCATIONS if loc.type is LocationType.SHOP][:shop_needed]

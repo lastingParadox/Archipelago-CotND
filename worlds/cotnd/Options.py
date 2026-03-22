@@ -26,6 +26,7 @@ all_game_modes = [
 ]
 
 
+# Goal Options
 class Goal(Choice):
     """What goal to set for the Crypt of the NecroDancer multiworld.
     All_Zones: Clear ALl Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear". Recommended for experienced players, as this can be challenging.
@@ -67,6 +68,7 @@ class FloorClearChecks(DefaultOnToggle):
     aliases = ["per_level_zone_clears"]
 
 
+# Content Options
 class DLC(OptionSet):
     """Which DLCs to include content from in progression and checks.
     Options include: Amplified, Synchrony, Miku, Shovel Knight
@@ -78,6 +80,38 @@ class DLC(OptionSet):
     default = ["Synchrony"]
 
 
+class IncludedExtraModes(OptionList):
+    """Which game modes to include in checks. Note that this will disable the mode from the run entirely if excluded.
+    Options include: No Return (Amplified), Hard (Amplified), Phasing (Amplified), Randomizer (Amplified), Mystery (Amplified), No Beat, Double Tempo, and Low Percent.
+    Note: If you do not have the Amplified DLC enabled, the modes that require it will be disabled.
+    """
+
+    display_name = "Included Extra Modes"
+    valid_keys = frozenset(all_game_modes)
+    default = []
+
+
+class IncludeCodexChecks(DefaultOnToggle):
+    """Determines whether Tutorial levels (Bomb Lore, How to Get Away with Murder, etc.) will be included in progression.Default is true."""
+
+    display_name = "Include Codex Checks"
+
+
+class LobbyNPCItems(Toggle):
+    """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead of unlocking their room."""
+
+    display_name = "Lobby NPC Items"
+
+
+class IncludeMaterials(Toggle):
+    """Whether to include weapon materials/shapes in the multiworld and in level generation. Default is false.
+    If set to true, weapons will only spawn with their base material until you unlock the associated material item.
+    """
+
+    display_name = "Include Materials"
+
+
+# Starting Inventory
 class StartingInventory(NamedRange):
     """Percentage of starting items granted at world start. Unique items are included if enabled.
     If Character Unlocks is not Item_Only, required items for the starting character are always included.
@@ -94,6 +128,38 @@ class StartingInventory(NamedRange):
     default = 50
 
 
+# Zone Access
+class ZoneAccessKeys(Choice):
+    """Controls whether zones are locked behind Zone Access Key items.
+    Disabled: Zones have no access requirements.
+    Separate: Each zone has its own distinct access key shuffled into the pool. The Starting Zone is freely accessible from the start; all other zones require their unique key.
+    Progressive: A single Progressive Zone Access item is used. Each copy found unlocks the next zone in sequence (Zone 1 requires 0, Zone 2 requires 1, etc.).
+    Default is Disabled."""
+
+    display_name = "Zone Access Keys"
+    option_disabled = 0
+    option_separate = 1
+    option_progressive = 2
+    default = 0
+
+
+class StartingZone(Choice):
+    """When Zone Access Keys are Separate or Progressive, sets the starting accessible zone.
+    Separate: The starting zone requires no key; all other zones need their unique key.
+    Progressive: Starting Zone minus one Progressive Zone Access items are precollected, granting immediate access to all zones up to and including the starting zone.
+    Zone 5 is only valid with Amplified enabled, otherwise pre-generation validation forces Zone 4.
+    Has no effect when Zone Access Keys is Disabled. Default is Zone 1."""
+
+    display_name = "Starting Zone"
+    option_zone_1 = 1
+    option_zone_2 = 2
+    option_zone_3 = 3
+    option_zone_4 = 4
+    option_zone_5 = 5
+    default = 1
+
+
+# Character Options
 class StartingCharacter(Choice):
     """Which character to start the game with. Default is Cadence.
     Note: If a selected starting character is not in the item pool, this option will change to a random character available in the item pool.
@@ -160,99 +226,19 @@ class IncludeUniqueEquipment(Toggle):
     display_name = "Include Unique Equipment"
 
 
-class IncludeMaterials(Toggle):
-    """Whether to include weapon materials/shapes in the multiworld and in level generation. Default is false.
-    If set to true, weapons will only spawn with their base material until you unlock the associated material item.
-    """
-
-    display_name = "Include Materials"
-
-
-class IncludedExtraModes(OptionList):
-    """Which game modes to include in checks. Note that this will disable the mode from the run entirely if excluded.
-    Options include: No Return (Amplified), Hard (Amplified), Phasing (Amplified), Randomizer (Amplified), Mystery (Amplified), No Beat, Double Tempo, and Low Percent.
-    Note: If you do not have the Amplified DLC enabled, the modes that require it will be disabled.
-    """
-
-    display_name = "Included Extra Modes"
-    valid_keys = frozenset(all_game_modes)
-    default = []
-
-
-class IncludeCodexChecks(DefaultOnToggle):
-    """Determines whether Tutorial levels (Bomb Lore, How to Get Away with Murder, etc.) will be included in progression. Default is true."""
-
-    display_name = "Include Codex Checks"
-
-
-class LobbyNPCItems(Toggle):
-    """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead of unlocking their room."""
-
-    display_name = "Lobby NPC Items"
-
-
-class ZoneAccessKeys(Choice):
-    """Controls whether zones are locked behind Zone Access Key items.
-    Disabled: Zones have no access requirements.
-    Separate: Each zone has its own distinct access key shuffled into the pool. The Starting Zone is
-    freely accessible from the start; all other zones require their unique key.
-    Progressive: A single Progressive Zone Access item is used. Each copy found unlocks the next zone
-    in sequence (Zone 1 requires 0, Zone 2 requires 1, etc.). The Starting Zone determines how many
-    copies are precollected at the start.
-    Default is Disabled."""
-
-    display_name = "Zone Access Keys"
-    option_disabled = 0
-    option_separate = 1
-    option_progressive = 2
-    default = 0
-
-
-class StartingZone(Choice):
-    """When Zone Access Keys are Separate or Progressive, sets the starting accessible zone.
-    Separate: the starting zone requires no key; all other zones need their unique key.
-    Progressive: Starting Zone minus one Progressive Zone Access items are precollected, granting
-    immediate access to all zones up to and including the starting zone.
-    Zone 5 is only valid with Amplified enabled; otherwise pre-generation validation forces Zone 4.
-    Has no effect when Zone Access Keys is Disabled. Default is Zone 1."""
-
-    display_name = "Starting Zone"
-    option_zone_1 = 1
-    option_zone_2 = 2
-    option_zone_3 = 3
-    option_zone_4 = 4
-    option_zone_5 = 5
-    default = 1
-
-
 class LockCharacterRoom(Toggle):
-    """When enabled, a Character Room Key item must be received before you can switch away from your
-    starting character. This creates an early-game chokepoint, restricting all runs to your starting
-    character until the key is found.
+    """When enabled, a Character Room Key item must be received before you can switch away from your starting character.
+    This creates an early-game chokepoint, restricting all runs to your starting character until the key is found.
     Default is false."""
 
     display_name = "Lock Character Room"
 
 
-class PriceRandomization(Choice):
-    """How to randomize diamond prices in the Archipelago lobby.
-    Vanilla: CotND item prices remain at their vanilla price values. All AP and non-CotND item prices will be randomized according to their item classification (Filler, Useful, Progression).
-    Vanilla_Rand: CotND item prices remain at their vanilla price values. All AP and non-CotND item prices will be randomized completely.
-    Item_Class: All item prices will be randomized according to their item classification (Filler, Useful, Progression).
-    Complete: All item prices will be randomized completely.
-    """
-
-    display_name = "Price Randomization"
-    option_Vanilla = 0
-    option_Vanilla_Rand = 1
-    option_Item_Class = 2
-    option_Complete = 3
-    default = 0
-
-
+# Trap Options
 class TrapPercentage(Range):
     """
     Replaces filler items with traps, at the specified rate.
+    Default is 20.
     """
 
     display_name = "Trap Percentage"
@@ -288,6 +274,24 @@ class TrapWeights(OptionCounter):
     min = 0
 
     default = _default_trap_weights
+
+
+# Pricing Options
+class PriceRandomization(Choice):
+    """How to randomize diamond prices in the Archipelago lobby.
+    Vanilla: CotND item prices remain at their vanilla price values. All AP and non-CotND item prices will be randomized according to their item classification (Filler, Useful, Progression).
+    Vanilla_Rand: CotND item prices remain at their vanilla price values. All AP and non-CotND item prices will be randomized completely.
+    Item_Class: All item prices will be randomized according to their item classification (Filler, Useful, Progression).
+    Complete: All item prices will be randomized completely.
+    Default is Vanilla.
+    """
+
+    display_name = "Price Randomization"
+    option_Vanilla = 0
+    option_Vanilla_Rand = 1
+    option_Item_Class = 2
+    option_Complete = 3
+    default = 0
 
 
 class RandomizedPriceMin(Range):
@@ -402,6 +406,27 @@ option_groups = [
             AllZonesGoalClear,
             ZonesGoalClear,
             FloorClearChecks,
+        ],
+    ),
+    OptionGroup(
+        "Content Options",
+        [
+            DLC,
+            IncludedExtraModes,
+            IncludeCodexChecks,
+            LobbyNPCItems,
+            IncludeMaterials,
+        ],
+    ),
+    OptionGroup(
+        "Starting Inventory",
+        [
+            StartingInventory,
+        ],
+    ),
+    OptionGroup(
+        "Zone Access",
+        [
             ZoneAccessKeys,
             StartingZone,
         ],

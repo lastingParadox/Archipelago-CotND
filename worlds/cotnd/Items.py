@@ -496,7 +496,7 @@ modes: list[RawCotNDItemData] = [
                      DefaultType.NEVER),
     RawCotNDItemData("No Beat Mode", ItemClassification.progression, ItemType.MODE, "APNoBeatMode", DLC.BASE,
                      DefaultType.NEVER),
-    RawCotNDItemData("Double Tempo Mode", ItemClassification.progression, ItemType.MODE, "APNoDoubleTempoMode",
+    RawCotNDItemData("Double Tempo Mode", ItemClassification.progression, ItemType.MODE, "APDoubleTempoMode",
                      DLC.BASE, DefaultType.NEVER),
     RawCotNDItemData("Low Percent Mode", ItemClassification.progression, ItemType.MODE, "APLowPercentMode",
                      DLC.BASE, DefaultType.NEVER),

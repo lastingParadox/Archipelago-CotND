@@ -209,16 +209,12 @@ class CotNDContext(CommonContext):
                     location = location_from_code(loc.location)
                     try:
                         item = item_from_code(loc.item)
-                    except ValueError:
-                        item = {
-                            "name": self.item_names.lookup_in_slot(loc.item, loc.player),
-                            "classification": loc.flags,
-                            "type": "APItem",
-                            "cotnd_id": "APItem",
-                            "dlc": "Base",
-                            "isDefault": False,
-                            "code": loc.item
-                        }
+                        item_cotnd_id = item.cotnd_id
+                        item_name = item.name
+                    except (KeyError, ValueError):
+                        # Unknown AP item code for this world, use generic metadata.
+                        item_cotnd_id = "APItem"
+                        item_name = self.item_names.lookup_in_slot(loc.item, loc.player)
 
                     source = "Hint"
                     if location.type is LocationType.SHOP:
@@ -229,9 +225,9 @@ class CotNDContext(CommonContext):
                     location_info.append({
                         "location": location.name,
                         "location_code": str(loc.location),
-                        "item": item.cotnd_id,
+                        "item": item_cotnd_id,
                         "playername": self.player_names[loc.player],
-                        "itemname": item.name,
+                        "itemname": item_name,
                         "flags": loc.flags,
                         "source": source,
                     })

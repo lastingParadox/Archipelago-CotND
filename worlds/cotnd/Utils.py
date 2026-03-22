@@ -20,7 +20,7 @@ def normalize_dlc(dlc: Iterable[str]) -> set[DLC]:
 
 
 def assign_caged_npcs(random: Random, dlc: Set[str]) -> Dict[str, Dict[str, Any]]:
-    zones = [1, 2, 3, 4, 5] if "Amplified" in dlc else [1, 2, 3, 4]
+    zones = [1, 2, 3, 4, 5] if "amplified" in dlc else [1, 2, 3, 4]
     levels = [1, 2, 3]
 
     # Distribute zones as evenly as possible
