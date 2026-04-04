@@ -55,13 +55,18 @@ class RawCotNDLocationData:
     name: str
     type: LocationType
     character: Optional[str]
-    dlc: DLC
+    required_dlcs: frozenset[DLC]
     zone: Optional[int]
 
 
 @dataclass(frozen=True, slots=True)
 class CotNDLocationData(RawCotNDLocationData):
     code: int | None
+
+
+def _required_dlcs(*dlcs: DLC) -> frozenset[DLC]:
+    """Build the set of DLCs required for a location, excluding BASE (always available)."""
+    return frozenset(d for d in dlcs if d != DLC.BASE)
 
 
 def generate_shop_locations(num: int) -> list[RawCotNDLocationData]:
@@ -80,7 +85,7 @@ def generate_shop_locations(num: int) -> list[RawCotNDLocationData]:
 
                 locations.append(
                     RawCotNDLocationData(f"{shopkeeper} - {direction} Shop Item {round_index}", LocationType.SHOP, None,
-                                         DLC.BASE, None)
+                                         frozenset(), None)
                 )
 
         round_index += 1
@@ -90,17 +95,17 @@ def generate_shop_locations(num: int) -> list[RawCotNDLocationData]:
 
 def generate_codex_locations():
     codex_locs = [
-        RawCotNDLocationData("Dragon Lore", LocationType.TUTORIAL, None, DLC.BASE, None),
-        RawCotNDLocationData("Trap Lore", LocationType.TUTORIAL, None, DLC.BASE, None),
-        RawCotNDLocationData("Bomb Lore", LocationType.TUTORIAL, None, DLC.BASE, None),
-        RawCotNDLocationData("How to Get Away with Murder", LocationType.TUTORIAL, None, DLC.BASE, None)
+        RawCotNDLocationData("Dragon Lore", LocationType.TUTORIAL, None, frozenset(), None),
+        RawCotNDLocationData("Trap Lore", LocationType.TUTORIAL, None, frozenset(), None),
+        RawCotNDLocationData("Bomb Lore", LocationType.TUTORIAL, None, frozenset(), None),
+        RawCotNDLocationData("How to Get Away with Murder", LocationType.TUTORIAL, None, frozenset(), None)
     ]
 
     return codex_locs
 
 
 def generate_npc_locations():
-    return [RawCotNDLocationData(f"Caged {npc}", LocationType.NPC, None, DLC.BASE, None) for npc in LOBBY_NPCS]
+    return [RawCotNDLocationData(f"Caged {npc}", LocationType.NPC, None, frozenset(), None) for npc in LOBBY_NPCS]
 
 
 def generate_zone_clear_locations(characters: list[CotNDItemData]):
@@ -110,47 +115,48 @@ def generate_zone_clear_locations(characters: list[CotNDItemData]):
 
     for char in characters:
         char_name = char.name
-        dlc = char.dlc
         for zone in range(1, zone_count + 1):
+            # Zone 5 only exists in Amplified; all zone-5 locations require it regardless of character.
+            required = _required_dlcs(char.dlc, DLC.AMPLIFIED) if zone == 5 else _required_dlcs(char.dlc)
             zone_locations.extend(
                 [RawCotNDLocationData(f"{char_name} - Zone {zone} - Floor {floor}", LocationType.FLOOR, char_name,
-                                      dlc, zone) for floor in
+                                      required, zone) for floor in
                  range(1, 4)]
             )
 
             if not char_name == "Dove":
                 zone_locations.append(
-                    RawCotNDLocationData(f"{char_name} - Zone {zone} - Boss", LocationType.BOSS, char_name, dlc, zone))
+                    RawCotNDLocationData(f"{char_name} - Zone {zone} - Boss", LocationType.BOSS, char_name, required, zone))
             zone_locations.append(
-                RawCotNDLocationData(f"{char_name} - Zone {zone}", LocationType.ZONE, char_name, dlc, zone))
+                RawCotNDLocationData(f"{char_name} - Zone {zone}", LocationType.ZONE, char_name, required, zone))
 
             if zone == 4:
                 if char_name == "Cadence":
                     zone_locations.append(
-                        RawCotNDLocationData(f"{char_name} - Dead Ringer", LocationType.UNIQUE_BOSS, char_name, dlc,
+                        RawCotNDLocationData(f"{char_name} - Dead Ringer", LocationType.UNIQUE_BOSS, char_name, required,
                                              zone))
                     zone_locations.append(
-                        RawCotNDLocationData(f"{char_name} - NecroDancer", LocationType.UNIQUE_BOSS, char_name, dlc,
+                        RawCotNDLocationData(f"{char_name} - NecroDancer", LocationType.UNIQUE_BOSS, char_name, required,
                                              zone))
                 elif char_name == "Melody":
                     zone_locations.append(
-                        RawCotNDLocationData(f"{char_name} - NecroDancer", LocationType.UNIQUE_BOSS, char_name, dlc,
+                        RawCotNDLocationData(f"{char_name} - NecroDancer", LocationType.UNIQUE_BOSS, char_name, required,
                                              zone))
             elif zone == 5 and char_name == "Nocturna":
                 zone_locations.append(
-                    RawCotNDLocationData(f"{char_name} - Frankensteinway", LocationType.UNIQUE_BOSS, char_name, dlc,
+                    RawCotNDLocationData(f"{char_name} - Frankensteinway", LocationType.UNIQUE_BOSS, char_name, required,
                                          zone))
                 zone_locations.append(
-                    RawCotNDLocationData(f"{char_name} - The Conductor", LocationType.UNIQUE_BOSS, char_name, dlc,
+                    RawCotNDLocationData(f"{char_name} - The Conductor", LocationType.UNIQUE_BOSS, char_name, required,
                                          zone))
             elif zone == 1 and char_name == "Aria":
                 zone_locations.append(
-                    RawCotNDLocationData(f"{char_name} - Dead Ringer", LocationType.UNIQUE_BOSS, char_name, dlc, zone))
+                    RawCotNDLocationData(f"{char_name} - Dead Ringer", LocationType.UNIQUE_BOSS, char_name, required, zone))
                 zone_locations.append(
-                    RawCotNDLocationData(f"{char_name} - Golden Lute", LocationType.UNIQUE_BOSS, char_name, dlc, zone))
+                    RawCotNDLocationData(f"{char_name} - Golden Lute", LocationType.UNIQUE_BOSS, char_name, required, zone))
 
     zone_locations.extend(
-        [RawCotNDLocationData(f"{char.name} - All Zones", LocationType.ALL_ZONES, char.name, char.dlc, None) for char in
+        [RawCotNDLocationData(f"{char.name} - All Zones", LocationType.ALL_ZONES, char.name, _required_dlcs(char.dlc), None) for char in
          characters])
 
     return zone_locations
@@ -164,10 +170,12 @@ def generate_extra_mode_locations(characters: list[CotNDItemData]):
 
         for char in characters:
             char_name = char.name
+            # Location requires all non-BASE DLCs: the character's and the mode's.
+            required = _required_dlcs(char.dlc, dlc_enum)
 
             for mode in modes:
                 locations.append(
-                    RawCotNDLocationData(f"{char_name} - {mode}", LocationType.EXTRA_MODE, char_name, dlc_enum, None))
+                    RawCotNDLocationData(f"{char_name} - {mode}", LocationType.EXTRA_MODE, char_name, required, None))
 
     return locations
 
@@ -177,11 +185,12 @@ def generate_event_locations(characters: list[CotNDItemData]):
     zones: list[RawCotNDLocationData] = []
     for char in characters:
         all_zones.append(
-            RawCotNDLocationData(f"{char.name} - Beat All Zones", LocationType.ALL_ZONES_EVENT, char.name, char.dlc,
-                                 None))
+            RawCotNDLocationData(f"{char.name} - Beat All Zones", LocationType.ALL_ZONES_EVENT, char.name,
+                                 _required_dlcs(char.dlc), None))
         for zone in range(1, 6):
+            required = _required_dlcs(char.dlc, DLC.AMPLIFIED) if zone == 5 else _required_dlcs(char.dlc)
             zones.append(
-                RawCotNDLocationData(f"{char.name} - Beat Zone {zone}", LocationType.ZONES_EVENT, char.name, char.dlc,
+                RawCotNDLocationData(f"{char.name} - Beat Zone {zone}", LocationType.ZONES_EVENT, char.name, required,
                                      zone))
 
     return all_zones + zones
@@ -216,7 +225,7 @@ def load_all_locations():
                 code=BASE_CODE + index if loc.type not in (
                     LocationType.ALL_ZONES_EVENT, LocationType.ZONES_EVENT) else None,
                 character=loc.character,
-                dlc=loc.dlc,
+                required_dlcs=loc.required_dlcs,
                 zone=loc.zone
             )
         )
@@ -248,12 +257,8 @@ def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_
         if location.type is LocationType.SHOP:
             continue
 
-        # Remove all locations associated with disabled dlc
-        if location.dlc is not DLC.BASE and location.dlc not in dlc_enums:
-            continue
-
-        # Remove all zone 5 locations if Amplified isn't enabled
-        if location.zone == 5 and DLC.AMPLIFIED not in dlc_enums:
+        # Remove all locations whose required DLCs are not all enabled
+        if not location.required_dlcs.issubset(dlc_enums):
             continue
 
         # Remove blacklisted characters

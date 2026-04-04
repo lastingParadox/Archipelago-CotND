@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Mapping, Any
+from typing import Mapping, Any, cast
 
 from BaseClasses import Tutorial, Region, ItemClassification, MultiWorld
 from worlds.AutoWorld import WebWorld, World
@@ -29,6 +29,7 @@ from worlds.cotnd.Locations import (
     get_last_shop_item_row,
     LocationType,
     CotNDLocation,
+    CotNDLocationData,
 )
 from worlds.cotnd.Options import CotNDOptions
 from worlds.cotnd.Regions import cotnd_regions, get_regions_to_locations
@@ -40,6 +41,7 @@ from worlds.cotnd.Validation import (
     cap_option,
     validate_price_ranges,
     validate_starting_zone,
+    validate_death_link_type,
     collect_starting_pool,
     validate_starting_character,
     collect_starting_character,
@@ -88,25 +90,27 @@ class CotNDWorld(World):
 
     game = "Crypt of the NecroDancer"
     options_dataclass = CotNDOptions
-    options: CotNDOptions
+    options: CotNDOptions  # pyright: ignore[reportIncompatibleVariableOverride]
     web = CotNDWeb()
     required_client_version = (0, 6, 1)
     item_name_groups = item_name_groups
     location_name_groups = location_name_groups
-    location_hint_codes = {}
+    location_hint_codes: dict[str, dict[str, list[int | None]]] = {}
     topology_present = True
 
     item_name_to_id = {item.name: item.code for item in all_items}
-    location_name_to_id = {location.name: location.code for location in all_locations}
+    location_name_to_id = {
+        location.name: location.code for location in all_locations if location.code is not None
+    }
 
-    dlcs = {}
-    chars = {}
-    world_item_list = {}
-    item_from_name = {}
-    item_from_code = {}
-    items = {}
-    locations = {}
-    caged_npc_locations = {}
+    dlcs: set[str] = set()
+    chars: list[CotNDItemData] = []
+    world_item_list: list[CotNDItemData] = []
+    item_from_name: dict[str, CotNDItemData] = {}
+    item_from_code: dict[int, CotNDItemData] = {}
+    items: list[CotNDItemData] = []
+    locations: list[CotNDLocationData] = []
+    caged_npc_locations: dict[str, dict[str, Any]] = {}
     starting_zone: int = 1
     starting_character_name: str = ""
 
@@ -115,6 +119,7 @@ class CotNDWorld(World):
 
         blacklist = validate_blacklist(self.options, self.dlcs)
         included_modes = validate_modes(self.options, self.dlcs)
+        validate_death_link_type(self.options, self.dlcs)
 
         (self.world_item_list, self.item_from_name, self.item_from_code) = (
             build_master_world_items(
@@ -280,8 +285,8 @@ class CotNDWorld(World):
         for item in self.items:
             self.multiworld.itempool.append(self.create_item(item.name))
 
-    def create_item(self, item_str: str):
-        item = self.item_from_name[item_str]
+    def create_item(self, name: str):
+        item = self.item_from_name[name]
         return CotNDItem(item.name, item.classification, item.code, self.player)
 
     def create_event(self, event: str):
@@ -330,7 +335,8 @@ class CotNDWorld(World):
             for location in sphere:
                 loc_item = location.item
                 if (
-                    loc_item.game != "Crypt of the NecroDancer"
+                    loc_item is None
+                    or loc_item.game != "Crypt of the NecroDancer"
                     or loc_item.player != self.player
                     or loc_item.code is None
                 ):
@@ -345,6 +351,7 @@ class CotNDWorld(World):
     def fill_slot_data(self) -> Mapping[str, Any]:
         fill = self.options.as_dict(
             "death_link",
+            "death_link_type",
             "dlc",
             "goal",
             "floor_clear_checks",
@@ -365,6 +372,7 @@ class CotNDWorld(World):
             "progression_price_max",
             "zone_access_keys",
             "lock_character_room",
+            "include_materials",
         )
 
         # fill["item_by_code"] = self.item_from_code
@@ -381,7 +389,7 @@ class CotNDWorld(World):
         spoiler_handle.write("\n\nLocked NPC Locations:")
         for player in cotnd_players:
             name = multiworld.get_player_name(player)
-            cotnd_world: CotNDWorld = multiworld.worlds[player]
+            cotnd_world = cast(CotNDWorld, multiworld.worlds[player])
             spoiler_handle.write(f"\n{name}\n")
             max_len = max(len(npc) for npc in cotnd_world.caged_npc_locations)
 

@@ -12,7 +12,9 @@ import Utils
 from worlds.cotnd.Items import item_from_code
 from worlds.cotnd.vendor_zstandard import load_vendored_zstandard
 
-load_vendored_zstandard(os.path.join(Utils.user_path(), "custom_worlds", "cotnd.apworld"))
+_apworld_custom = os.path.join(Utils.user_path(), "custom_worlds", "cotnd.apworld")
+_apworld_builtin = os.path.join(Utils.local_path(), "worlds", "cotnd.apworld")
+load_vendored_zstandard(_apworld_custom if os.path.exists(_apworld_custom) else _apworld_builtin)
 
 import zstandard
 
@@ -87,9 +89,9 @@ class CotNDContext(CommonContext):
         super().__init__(server_address, password)
         self.cotnd_server = CotNDServer(self)
 
-        self.slotdata: Dict[str, str | int] = {}
+        self.slotdata: dict[str, Any] = {}
         self.connected_to_ap = False
-        self.location_hints_remaining = {}
+        self.location_hints_remaining: dict[str, set[Any]] = {}
         self.last_received_index = 0
 
     def run_gui(self):
@@ -141,8 +143,9 @@ class CotNDContext(CommonContext):
             # Sent to client when the connection handshake is completed
             elif cmd == "Connected":
                 self.connected_to_ap = True
-                self.slotdata = args.get("slot_data")
-                asyncio.create_task(self.update_death_link(self.slotdata.get("death_link", False)))
+                slot_data = args.get("slot_data")
+                self.slotdata = slot_data if isinstance(slot_data, dict) else {}
+                asyncio.create_task(self.update_death_link(bool(self.slotdata.get("death_link", False))))
                 logger.info("[CotNDServer] Starting server...")
                 asyncio.create_task(
                     self.cotnd_server.start(),
@@ -204,7 +207,7 @@ class CotNDContext(CommonContext):
 
             # Send to client when acknowledging LocationScouts packet, responding with item in location being scouted
             elif cmd == "LocationInfo":
-                locs = args.get("locations")
+                locs = args.get("locations") or []
                 location_info = []
                 for loc in locs:
                     location = location_from_code(loc.location)
@@ -250,7 +253,8 @@ class CotNDContext(CommonContext):
                 if msg_type == "ServerChat":
                     player = "Server"
                 else:
-                    player = self.player_names[args.get("slot")]
+                    slot = args.get("slot")
+                    player = self.player_names[slot] if isinstance(slot, int) else "Unknown"
 
                 message = args.get("message")
 
@@ -260,12 +264,21 @@ class CotNDContext(CommonContext):
                     "player": player
                 }))
 
+            # TrapLink handling is still in progress.
+            # elif "TrapLink" in self.tags and "TrapLink" in args["tags"] and args["data"]["source"] != self.slot_info[self.slot].name:
+            #     trap_name: str = args["data"]["trap_name"]
+            #     if trap_name not in trap_name_to_value:
+            #         return
+            #
+            #     trap_id = trap_name_to_value[trap_name]
+
         except Exception as e:
             logger.error(f"CotND on_package error: {e}")
 
         return super().on_package(cmd, args)
 
-    async def manage_event(self, datatype: str, data: Dict[str, Any] = None):
+    async def manage_event(self, datatype: str, data: dict[str, Any] | None = None):
+        data = data or {}
         try:
             match datatype:
                 case "State":
@@ -274,9 +287,14 @@ class CotNDContext(CommonContext):
 
                     print("Sending randomizer data to CotND")
 
+                    hint_codes = self.slotdata.get("location_hint_codes", {})
+                    if not isinstance(hint_codes, dict):
+                        hint_codes = {}
+
                     self.location_hints_remaining = {
                         k: {loc for loc in v}
-                        for k, v in self.slotdata.get("location_hint_codes", {}).items()
+                        for k, v in hint_codes.items()
+                        if isinstance(v, (list, set, tuple))
                     }
 
                     state_packet = {
@@ -287,7 +305,7 @@ class CotNDContext(CommonContext):
                         "missing_locations": list(
                             [location_from_code(location).name for location in self.missing_locations]),
                         "checked_locations": list(
-                            [location_from_code(location).name for location in self.checked_locations]),
+                            [location_from_code(loc).name for loc in self.checked_locations]),
                     }
 
                     items_list = []
@@ -304,12 +322,21 @@ class CotNDContext(CommonContext):
 
                     state_packet["items"] = items_list
                     self.last_received_index = len(self.items_received)
-
                     # If the initial state, send initial state + search for shop locations
                     if data.get("init", False):
+
+                        death_link_type = self.slotdata.get("death_link_type", 1)
+                        if death_link_type == 0:
+                            death_link_type = "Absolute"
+                        elif death_link_type == 2:
+                            death_link_type = "Marv"
+                        else:
+                            death_link_type = "Tempo"
+
                         state_packet.update({
                             "goal": goal,
                             "goal_required": goal_required,
+                            "death_link_type": death_link_type,
                             "per_level_checks": False if self.slotdata.get("floor_clear_checks") == 0 else True,
                             "extra_modes": self.slotdata.get("included_extra_modes"),
                             "dlc": self.slotdata.get("dlc"),
@@ -364,11 +391,21 @@ class CotNDContext(CommonContext):
                 case "Death":
                     print("Sending a death!", self.tags)
                     if "DeathLink" in self.tags:
-                        await self.send_death(data.get("msg"))
+                        await self.send_death(str(data.get("msg", "")))
                 case "Locations":
                     locs = data.get("sources")
                     if locs is not None:
-                        resolved_ids = [location_from_name(name).code for name in locs]
+                        resolved_ids = []
+                        for name in locs:
+                            try:
+                                loc_code = location_from_name(name).code
+                            except (KeyError, ValueError):
+                                logger.warning(f"Unknown CotND location from mod: {name}")
+                                continue
+
+                            if loc_code is not None:
+                                resolved_ids.append(loc_code)
+
                         self.locations_checked.update(resolved_ids)
                     await self.send_msgs([{"cmd": "LocationChecks", "locations": self.locations_checked}])
                 case "ScoutLocation":
@@ -379,11 +416,13 @@ class CotNDContext(CommonContext):
                             "locations": [loc_id]
                         }])
                 case "Hint":
-                    hint_types = data.get("type")
+                    hint_types = data.get("type", "Random")
 
                     # Normalize to list
                     if isinstance(hint_types, str):
                         hint_types = [hint_types]
+                    elif not isinstance(hint_types, (list, tuple, set)):
+                        hint_types = ["Random"]
 
                     # Nothing to hint if all sets are empty
                     if not any(self.location_hints_remaining.values()):
@@ -420,7 +459,7 @@ class CotNDContext(CommonContext):
                         }])
 
                 case "Chat":
-                    await self.send_msgs([{"cmd": "Say", "text": data.get("msg")}])
+                    await self.send_msgs([{"cmd": "Say", "text": str(data.get("msg", ""))}])
                 case "Victory":
                     await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
                 case _:
@@ -489,7 +528,8 @@ class CotNDServer:
         await self._send_bytes(payload)
 
     async def _send_bytes(self, payload: bytes):
-        if self._writer.is_closing():
+        writer = self._writer
+        if writer is None or writer.is_closing():
             return
 
         # 1) Serialize string in LuaJIT format (prefix .U + payload)
@@ -501,8 +541,8 @@ class CotNDServer:
         header = struct.pack(">I", len(compressed))
 
         # 4) Send to all connected clients
-        self._writer.write(header + compressed)
-        await self._writer.drain()
+        writer.write(header + compressed)
+        await writer.drain()
 
     async def _safe_close_writer(self):
         writer = self._writer
@@ -544,9 +584,10 @@ class CotNDServer:
                     print(f"[CotNDServer] Client identity: {identity}")
                     self.cotnd_connected = True
                     # Send a new framed response
+                    player_name = self.ctx.player_names[self.ctx.slot] if self.ctx.slot is not None else ""
                     await self.send_packet(
                         {"datatype": "Handshake", "seed": self.ctx.seed_name,
-                         "playerName": self.ctx.player_names[self.ctx.slot]})
+                         "playerName": player_name})
                     handshake_done = True
                     continue
 
@@ -580,24 +621,34 @@ class CotNDServer:
         datatype = packet.datatype
         match datatype:
             case "State":
-                init = packet.init or False
+                init = bool(getattr(packet, "init", False))
                 await self.ctx.manage_event(datatype, {"init": init})
             case "Victory":
                 if not self.ctx.finished_game:
                     await self.ctx.manage_event(datatype)
             case "Locations":
-                sources: Set[int] = set(packet.sources)
-                sources.difference_update(self.ctx.checked_locations)
-                if len(sources):
-                    await self.ctx.manage_event(datatype, {"sources": list(sources)})
+                raw_sources = getattr(packet, "sources", []) or []
+                source_names: set[str] = set()
+
+                for source in raw_sources:
+                    if isinstance(source, str):
+                        source_names.add(source)
+                    elif isinstance(source, int):
+                        try:
+                            source_names.add(location_from_code(source).name)
+                        except (KeyError, ValueError):
+                            continue
+
+                if len(source_names):
+                    await self.ctx.manage_event(datatype, {"sources": list(source_names)})
             case "Death" | "Chat":
-                message = packet.msg or ""
+                message = str(getattr(packet, "msg", "") or "")
                 await self.ctx.manage_event(datatype, {"msg": message})
             case "Hint":
-                hint_type = packet.type or "Random"
+                hint_type = getattr(packet, "type", "Random") or "Random"
                 await self.ctx.manage_event(datatype, {"type": hint_type})
-            case "Disconnected":
-                await self.ctx.manage_event(datatype)
+            case "Disconnected" | "Disconnect":
+                await self.ctx.manage_event("Disconnected")
             case _:
                 return
 

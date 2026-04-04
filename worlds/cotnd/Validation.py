@@ -1,7 +1,7 @@
 from typing import List
 
 from .Characters import get_available_characters
-from .Items import get_starting_pool, CotNDItemData, ItemType
+from .Items import get_starting_pool, CotNDItemData, ItemType, DefaultType
 from .Utils import character_requirements
 
 
@@ -17,31 +17,28 @@ def ensure_min_max(options, min_name: str, max_name: str) -> None:
         setattr(options, max_name, type(getattr(options, max_name))(min_val))
 
 
-def validate_blacklist(options, dlcs):
+def validate_blacklist(options, dlcs) -> set[str]:
     blacklist = set(options.character_blacklist.value)
     all_chars = get_available_characters(blacklist, dlcs)
     if len(all_chars) == 0:
         print("[WARNING] Removing Cadence from the blacklist to maintain progression.")
-        blacklist = [c for c in blacklist if c != "Cadence"]
-        options.character_blacklist.value = blacklist
+        blacklist.discard("Cadence")
+        options.character_blacklist.value = list(blacklist)
     return blacklist
 
 
-def validate_modes(options, dlcs):
-    included_modes = list(options.included_extra_modes.value)
+def validate_modes(options, dlcs) -> set[str]:
+    included_modes = set(options.included_extra_modes.value)
 
     if "amplified" not in dlcs:
         amplified_modes = {"No Return", "Hard", "Phasing", "Randomizer", "Mystery"}
-        before = set(included_modes)
-        included_modes = [
-            mode for mode in included_modes if mode not in amplified_modes
-        ]
-        removed = before - set(included_modes)
+        removed = included_modes & amplified_modes
+        included_modes -= amplified_modes
         if removed:
             print(
-                f"[WARNING] Removed Amplified-only modes (no Amplified DLC enabled): {', '.join(removed)}"
+                f"[WARNING] Removed Amplified-only modes (no Amplified DLC enabled): {', '.join(sorted(removed))}"
             )
-        options.included_extra_modes.value = included_modes
+        options.included_extra_modes.value = list(included_modes)
 
     return included_modes
 
@@ -68,6 +65,14 @@ def validate_starting_zone(options, dlcs):
         options.starting_zone.value = 4
 
 
+def validate_death_link_type(options, dlcs):
+    if "amplified" not in dlcs and options.death_link_type.value == 2:  # 2 is Marv
+        print(
+            "[WARNING] Changing DeathLink type from Marv to Tempo because Marv requires Amplified DLC."
+        )
+        options.death_link_type.value = 1  # 1 is Tempo
+
+
 def validate_starting_character(world, character_option, items: List[CotNDItemData]):
     characters = [item for item in items if item.type is ItemType.CHARACTER]
 
@@ -84,8 +89,16 @@ def validate_starting_character(world, character_option, items: List[CotNDItemDa
 
 
 def collect_starting_pool(world, items_list, starting_inventory, include_materials):
+    # When materials are disabled, precollect them all (unlocking all weapons from the start)
+    # and remove them from the item pool so they aren't placed in the world.
+    if not include_materials:
+        for item in items_list:
+            if item.type is ItemType.MATERIAL:
+                world.multiworld.push_precollected(world.create_item(item.name))
+        items_list = [item for item in items_list if item.type is not ItemType.MATERIAL]
+
     starting_pool = get_starting_pool(
-        world.random, items_list, starting_inventory, include_materials
+        world.random, items_list, starting_inventory
     )
 
     # Push to collect
@@ -110,7 +123,7 @@ def collect_starting_character(
 
     # Collect items to remove and precollect required items
     items_to_remove = {character.name}  # Track names to remove
-    
+
     if character_unlocks != 0:
         for requirement in character_requirements.get(character.name, set()):
             if any(item.name == requirement for item in items_list):

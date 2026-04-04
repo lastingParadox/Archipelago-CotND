@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import Any, Dict, List
 
 from BaseClasses import MultiWorld
 from worlds.cotnd.Items import DefaultType, CotNDItemData
@@ -41,7 +41,7 @@ def set_rules(
     starting_zone: int = 1,
     lock_character_room: bool = False,
     starting_character: str = "",
-    caged_npc_locations: dict = None,
+    caged_npc_locations: dict[str, dict[str, Any]] | None = None,
 ):
     max_zone = max((location.zone or 0) for location in locations)
 
@@ -102,6 +102,9 @@ def set_rules(
             LocationType.ALL_ZONES_EVENT,
             LocationType.ZONES_EVENT,
         ):
+            if location.character is None:
+                continue
+
             set_rule(loc, lambda state, c=location.character: state.has(c, player))
 
             if (
@@ -116,10 +119,14 @@ def set_rules(
             continue
 
         if location.type is LocationType.EXTRA_MODE:
-            mode = location.name.split(" - ")[1]
+            if location.character is None:
+                continue
+
+            mode_short = location.name.split(" - ")[1]
+            mode_item = mode_short + " Mode"
             set_rule(
                 loc,
-                lambda state, c=location.character, m=mode: state.has(c, player)
+                lambda state, c=location.character, m=mode_item: state.has(c, player)
                 and state.has(m, player),
             )
             continue

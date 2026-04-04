@@ -4,7 +4,7 @@ from copy import copy
 from dataclasses import dataclass
 from enum import Enum, auto
 from random import Random
-from typing import Final, Set, Tuple
+from typing import Final, Optional, Set, Tuple
 
 from BaseClasses import Item, ItemClassification
 from worlds.cotnd.Utils import DLC, normalize_dlc, character_requirements
@@ -361,6 +361,8 @@ spells: list[RawCotNDItemData] = [
     RawCotNDItemData("Charm Spell", ItemClassification.useful, ItemType.SPELL, "Sync_SpellCharm", DLC.SYNCHRONY,
                      DefaultType.POSSIBLE),
     RawCotNDItemData("Transform Spell", ItemClassification.useful, ItemType.SPELL, "SpellTransform", DLC.AMPLIFIED,
+                     DefaultType.UNIQUE),
+    RawCotNDItemData("Sing Spell", ItemClassification.useful, ItemType.SPELL, "Coldsteel_SpellResonance", DLC.MIKU,
                      DefaultType.UNIQUE)
 ]
 
@@ -442,8 +444,7 @@ materials: list[RawCotNDItemData] = [
     RawCotNDItemData("Obsidian Material", ItemClassification.useful, ItemType.MATERIAL, "AP_MaterialObsidian",
                      DLC.BASE, DefaultType.MATERIAL),
     RawCotNDItemData("Onyx Material", ItemClassification.useful, ItemType.MATERIAL, "AP_MaterialOnyx",
-                     DLC.SYNCHRONY,
-                     DefaultType.MATERIAL),
+                     DLC.SYNCHRONY, DefaultType.MATERIAL),
     RawCotNDItemData("Titanium Material", ItemClassification.useful, ItemType.MATERIAL, "AP_MaterialTitanium",
                      DLC.BASE, DefaultType.MATERIAL),
 ]
@@ -645,18 +646,18 @@ def get_shop_stock_unlocks(items: list[CotNDItemData], index: int):
 
 
 def build_master_world_items(
-        character_blacklist: Set[str] = None,
-        dlc: Set[str] = None,
-        game_modes: Set[str] = None,
+        character_blacklist: Optional[Set[str]] = None,
+        dlc: Optional[Set[str]] = None,
+        game_modes: Optional[Set[str]] = None,
         include_unique_items: bool = False,
         character_unlocks: str = "item_only"
 ) -> Tuple[list[CotNDItemData], dict[str, CotNDItemData], dict[int, CotNDItemData]]:
     if character_blacklist is None:
-        character_blacklist = {}
+        character_blacklist = set()
     if dlc is None:
-        dlc = {}
+        dlc = set()
     if game_modes is None:
-        game_modes = []
+        game_modes = set()
     dlc_enums = normalize_dlc(dlc)
     result: list[CotNDItemData] = []
 
@@ -742,7 +743,6 @@ def get_starting_pool(
     random: Random,
     items_list: list[CotNDItemData],
     starting_inventory: int,
-    include_materials: bool
 ):
     starting_pool: list[CotNDItemData] = []
 
@@ -753,7 +753,8 @@ def get_starting_pool(
         if item.default is DefaultType.NEVER:
             continue
 
-        if not include_materials and item.type is ItemType.MATERIAL:
+        # Materials and unique items should always be found in the world, not given at start
+        if item.type is ItemType.MATERIAL or item.default is DefaultType.UNIQUE:
             continue
 
         starting_pool.append(item)

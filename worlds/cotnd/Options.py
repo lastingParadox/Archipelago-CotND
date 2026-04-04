@@ -25,10 +25,24 @@ all_game_modes = [
     "Low Percent",
 ]
 
+# DeathLink Options
+class DeathLinkType(Choice):
+    """How receiving a DeathLink should impact gameplay. Default is Tempo.
+    Absolute: When receiving a DeathLink mid-run, you immediately die.
+    Tempo: When receiving a DeathLink mid-run, a death timer will tick down the next 24 turns. If you can complete the level, the timer is removed and you avoid death. Having an active death timer will always treat a new DeathLink as an immediate death.
+    Marv: Amplified Required: When receiving a DeathLink, receive a Marv follower. Multiple DeathLinks will add more Marvs. If any Marv is killed, you lose 20% of your max health every turn. If you can complete the level, all Marvs are removed and you avoid death.
+    Note: The Marv setting requires Amplified, and will be swapped out for Tempo if chosen without Amplified. Any effects that trigger on-death will occur, including health potions.
+    """
+
+    display_name = "DeathLink Type"
+    option_Absolute = 0
+    option_Tempo = 1
+    option_Marv = 2
+    default = 1
 
 # Goal Options
 class Goal(Choice):
-    """What goal to set for the Crypt of the NecroDancer multiworld.
+    """What goal to set for the Crypt of the NecroDancer multiworld. Default is Zones.
     All_Zones: Clear ALl Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear". Recommended for experienced players, as this can be challenging.
     Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks. Recommended for a quicker and less challenging experience.
     """
@@ -113,19 +127,20 @@ class IncludeMaterials(Toggle):
 
 # Starting Inventory
 class StartingInventory(NamedRange):
-    """Percentage of starting items granted at world start. Unique items are included if enabled.
+    """Percentage of starting items granted at world start.
     If Character Unlocks is not Item_Only, required items for the starting character are always included.
-    Default is 50.
+    Default is 33.
 
     Presets:
     Vanilla (100): All starting items, like a fresh save.
-    Reduced (50): Half of all starting items.
+    Half (50): Half of all starting items.
+    Reduced (33): A third of all starting items.
     Minimum (0): Only mandatory items (Dagger, Apple, Shovel)."""
 
     range_start = 0
     range_end = 100
-    special_range_names = {"vanilla": 100, "reduced": 50, "minimum": 0}
-    default = 50
+    special_range_names = {"vanilla": 100, "half": 50, "reduced": 33, "minimum": 0}
+    default = 33
 
 
 # Zone Access
@@ -373,6 +388,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     zones_goal_clear: ZonesGoalClear
     floor_clear_checks: FloorClearChecks
     dlc: DLC
+    death_link_type: DeathLinkType
     starting_inventory: StartingInventory
     starting_character: StartingCharacter
     character_blacklist: CharacterBlacklist
