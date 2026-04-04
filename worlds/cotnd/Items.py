@@ -361,8 +361,6 @@ spells: list[RawCotNDItemData] = [
     RawCotNDItemData("Charm Spell", ItemClassification.useful, ItemType.SPELL, "Sync_SpellCharm", DLC.SYNCHRONY,
                      DefaultType.POSSIBLE),
     RawCotNDItemData("Transform Spell", ItemClassification.useful, ItemType.SPELL, "SpellTransform", DLC.AMPLIFIED,
-                     DefaultType.UNIQUE),
-    RawCotNDItemData("Sing Spell", ItemClassification.useful, ItemType.SPELL, "Coldsteel_SpellResonance", DLC.MIKU,
                      DefaultType.UNIQUE)
 ]
 
