@@ -75,6 +75,6 @@ character_requirements = {
     "Klarinetta": {"Zweihander", "Shiny Armor", "Nazar Charm"},
     "Chaunter": {"Lantern"},
     "Suzu": {"Lance of Courage"},
-    "Hatsune Miku": {"Leek", "Virtual Armor"},
+    "Hatsune Miku": {"Leek", "Virtual Armor", "Sing Spell"},
     "Shovel Knight": {"Shovel Blade"}
 }
