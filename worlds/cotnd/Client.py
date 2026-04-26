@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import os
 import platform
@@ -9,7 +10,7 @@ import urllib.parse
 from typing import Dict, Set, Any
 
 import Utils
-from worlds.cotnd.Items import item_from_code
+from worlds.cotnd.Items import ItemType, item_from_code
 from worlds.cotnd.vendor_zstandard import load_vendored_zstandard
 
 _apworld_custom = os.path.join(Utils.user_path(), "custom_worlds", "cotnd.apworld")
@@ -27,6 +28,7 @@ from worlds.cotnd.Locations import (
     location_from_code,
     LocationType,
 )
+from worlds.cotnd.Utils import trap_name_to_value
 
 ModuleUpdate.update()
 system = platform.system()
@@ -73,10 +75,20 @@ class CotNDCommandProcessor(ClientCommandProcessor):
         if isinstance(self.ctx, CotNDContext):
             death_link_enabled = "DeathLink" not in self.ctx.tags
             asyncio.create_task(self.ctx.update_death_link(death_link_enabled), name="Update Deathlink")
-            logger.info(f"Deathlink {'enabled' if death_link_enabled else 'disabled'}")
+            logger.info(f"DeathLink {'enabled' if death_link_enabled else 'disabled'}")
             asyncio.create_task(self.ctx.cotnd_server.send_packet({
                 "datatype": "SetDeathLink",
                 "deathlink": death_link_enabled
+            }))
+    def _cmd_traplink(self):
+        """Toggle traplink."""
+        if isinstance(self.ctx, CotNDContext):
+            trap_link_enabled = "TrapLink" not in self.ctx.tags
+            asyncio.create_task(self.ctx.update_trap_link(trap_link_enabled), name="Update Traplink")
+            logger.info(f"TrapLink {'enabled' if trap_link_enabled else 'disabled'}")
+            asyncio.create_task(self.ctx.cotnd_server.send_packet({
+                "datatype": "SetTrapLink",
+                "traplink": trap_link_enabled
             }))
 
 
@@ -91,8 +103,10 @@ class CotNDContext(CommonContext):
 
         self.slotdata: dict[str, Any] = {}
         self.connected_to_ap = False
-        self.location_hints_remaining: dict[str, set[Any]] = {}
         self.last_received_index = 0
+        self.game_last_received_index: int | None = None
+        self.stored_save_data: list[str] = []
+        self._hint_requested: bool = False
 
     def run_gui(self):
         from kvui import GameManager
@@ -112,6 +126,15 @@ class CotNDContext(CommonContext):
             await super(CotNDContext, self).server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
+
+    async def update_trap_link(self, trap_link: bool):
+        old_tags = self.tags.copy()
+        if trap_link:
+            self.tags.add("TrapLink")
+        else:
+            self.tags -= {"TrapLink"}
+        if old_tags != self.tags and self.server and not self.server.socket.closed:
+            await self.send_msgs([{"cmd": "ConnectUpdate", "tags": self.tags}])
 
     async def disconnect(self, allow_autoreconnect: bool = False):
         try:
@@ -146,6 +169,10 @@ class CotNDContext(CommonContext):
                 slot_data = args.get("slot_data")
                 self.slotdata = slot_data if isinstance(slot_data, dict) else {}
                 asyncio.create_task(self.update_death_link(bool(self.slotdata.get("death_link", False))))
+
+                if self.slotdata.get("trap_link", False):
+                    self.tags.add("TrapLink")
+
                 logger.info("[CotNDServer] Starting server...")
                 asyncio.create_task(
                     self.cotnd_server.start(),
@@ -156,6 +183,7 @@ class CotNDContext(CommonContext):
                 new_items = self.items_received[self.last_received_index:]
                 print(f"New Items: {new_items}, Index: {self.last_received_index}")
                 indexed_items = []
+                trap_items: list[str] = []
 
                 for idx, netitem in enumerate(new_items, start=self.last_received_index):
                     item_info = item_from_code(netitem.item)
@@ -168,41 +196,49 @@ class CotNDContext(CommonContext):
                         "ap_index": idx
                     })
 
-                # Update hint counts if this location was hinted
-                for netitem in new_items:
-                    loc_str = netitem.location
-                    for k, locs in self.location_hints_remaining.items():
-                        if loc_str in locs:
-                            locs.discard(loc_str)
-                            break
+                    if "TrapLink" in self.tags and item_info.type == ItemType.TRAP:
+                        if args.get("index", 0) > 0:
+                            # Incremental update — item is genuinely new this session
+                            trap_items.append(item_info.name)
+                        elif self.game_last_received_index is not None and idx >= self.game_last_received_index:
+                            # Full resync — only forward items the mod hasn't processed yet
+                            trap_items.append(item_info.name)
 
                 self.last_received_index = len(self.items_received)
-                counts = {k: len(v) for k, v in self.location_hints_remaining.items()}
 
                 asyncio.create_task(self.cotnd_server.send_packet({
                     "datatype": "Items",
                     "items": indexed_items,
-                    "location_hint_amounts": counts,
                 }))
 
-            # Sent to client as a response to a "Get" package (used for determining stored hints)
+                if len(trap_items) > 0:
+                    asyncio.create_task(self.send_trap_links(trap_items))
+
+            # Sent to client as a response to a "Get" package
             elif cmd == "Retrieved":
                 keys_dict = args.get("keys", {})
 
-                my_hints = keys_dict.get(f"_read_hints_{self.team}_{self.slot}", [])
-                hinted_locations = {hint["location"] for hint in my_hints}
+                # If this is a response to a hint request, pick an unhinted missing location and create the hint.
+                hints_key = f"_read_hints_{self.team}_{self.slot}"
+                if self._hint_requested and hints_key in keys_dict:
+                    self._hint_requested = False
+                    existing_hints = keys_dict.get(hints_key) or []
+                    hinted_locations = {hint["location"] for hint in existing_hints}
+                    candidates = [loc for loc in self.missing_locations if loc not in hinted_locations]
+                    if candidates:
+                        loc_id = random.choice(candidates)
+                        asyncio.create_task(self.send_msgs([{"cmd": "LocationScouts", "locations": [loc_id]}]))
+                        asyncio.create_task(self.send_msgs([{
+                            "cmd": "CreateHints",
+                            "locations": [loc_id],
+                            "status": HintStatus.HINT_UNSPECIFIED
+                        }]))
 
-                for k, locs in self.location_hints_remaining.items():
-                    locs.difference_update(self.checked_locations)
-                    locs.difference_update(hinted_locations)
-
-            # Sent when there is a need to update info about the present game session
-            elif cmd == "RoomUpdate":
-                if args.get("checked_locations"):
-                    locations = [location_from_code(location_id).name for location_id in
-                                 args.get("checked_locations")]
-                    asyncio.create_task(
-                        self.cotnd_server.send_packet({"datatype": "Locations", "checked_locations": locations}))
+                # Restore player-verified checked locations from server storage.
+                save_key = f"cotnd_{self.slot}_save"
+                if save_key in keys_dict:
+                    stored = keys_dict[save_key]
+                    self.stored_save_data = stored if isinstance(stored, list) else []
 
 
             # Send to client when acknowledging LocationScouts packet, responding with item in location being scouted
@@ -236,46 +272,84 @@ class CotNDContext(CommonContext):
                         "source": source,
                     })
 
-                counts = {k: len(v) for k, v in self.location_hints_remaining.items()}
-
                 asyncio.create_task(self.cotnd_server.send_packet({
                     "datatype": "LocationInfo",
                     "location_info": location_info,
-                    "location_hint_amounts": counts
                 }))
 
-            # Sent to client purely to display a message to the player. We should only send data on args["data"]["type"] == "Chat" || "ServerChat"
+            # Sent to client purely to display a message to the player.
             elif cmd == "PrintJSON":
                 msg_type = args.get("type")
-                if msg_type != "Chat" and msg_type != "ServerChat":
+                FORWARD_TYPES = {
+                    "Chat", "ServerChat", "CommandResult", "AdminCommandResult",
+                    "Tutorial", "Countdown",
+                }
+                if msg_type not in FORWARD_TYPES:
                     return
 
-                if msg_type == "ServerChat":
-                    player = "Server"
-                else:
+                # Flatten the structured data array to plain text.
+                message = self.rawjsontotextparser(copy.deepcopy(args["data"]))
+
+                if msg_type == "Chat":
                     slot = args.get("slot")
                     player = self.player_names[slot] if isinstance(slot, int) else "Unknown"
-
-                message = args.get("message")
+                elif msg_type == "ServerChat":
+                    player = "Server"
+                else:
+                    # CommandResult, AdminCommandResult, Tutorial, Countdown, etc.
+                    player = "Archipelago"
 
                 asyncio.create_task(self.cotnd_server.send_packet({
                     "datatype": "Chat",
                     "msg": message,
-                    "player": player
+                    "player": player,
                 }))
 
             # TrapLink handling is still in progress.
-            # elif "TrapLink" in self.tags and "TrapLink" in args["tags"] and args["data"]["source"] != self.slot_info[self.slot].name:
-            #     trap_name: str = args["data"]["trap_name"]
-            #     if trap_name not in trap_name_to_value:
-            #         return
-            #
-            #     trap_id = trap_name_to_value[trap_name]
+            elif cmd == "Bounced" and "TrapLink" in self.tags and "TrapLink" in args.get("tags", []) and self.slot is not None and args.get("data", {}).get("source") != self.slot_info[self.slot].name:
+                trap_name: str = args["data"]["trap_name"]
+                if trap_name not in trap_name_to_value:
+                    return
+
+                cotnd_trap = trap_name_to_value[trap_name]
+
+                if "trap_weights" not in self.slotdata or f"{cotnd_trap}" not in self.slotdata["trap_weights"]:
+                    return
+                
+                if self.slotdata["trap_weights"][cotnd_trap] == 0:
+                    return
+
+                cotnd_trap = cotnd_trap.replace(" ", "")
+
+                if cotnd_trap == "WIDETrap":
+                    cotnd_trap = "WideTrap"
+
+                asyncio.create_task(self.cotnd_server.send_packet({
+                    "datatype": "Trap",
+                    "trap_name": cotnd_trap
+                }))
 
         except Exception as e:
             logger.error(f"CotND on_package error: {e}")
+            print(e)
 
         return super().on_package(cmd, args)
+    
+    async def send_trap_links(self, traps: list[str]):
+        if "TrapLink" not in self.tags or self.slot is None:
+            return
+        for trap_name in traps:
+            await self.send_msgs([{
+                "cmd": "Bounce",
+                "tags": ["TrapLink"],
+                "data": {
+                    "time": time.time(),
+                    "source": self.player_names[self.slot],
+                    "trap_name": trap_name
+                }
+            }])
+            logger.info(f"Sent linked {trap_name}")
+
 
     async def manage_event(self, datatype: str, data: dict[str, Any] | None = None):
         data = data or {}
@@ -285,27 +359,20 @@ class CotNDContext(CommonContext):
                     goal, goal_required = ("All Zones", self.slotdata.get("all_zones_goal_clear")) if self.slotdata.get(
                         "goal") == 0 else ("Zones", self.slotdata.get("zones_goal_clear"))
 
+                    game_index = data.get("game_last_received_index")
+                    if game_index is not None:
+                        self.game_last_received_index = int(game_index)
+
                     print("Sending randomizer data to CotND")
-
-                    hint_codes = self.slotdata.get("location_hint_codes", {})
-                    if not isinstance(hint_codes, dict):
-                        hint_codes = {}
-
-                    self.location_hints_remaining = {
-                        k: {loc for loc in v}
-                        for k, v in hint_codes.items()
-                        if isinstance(v, (list, set, tuple))
-                    }
 
                     state_packet = {
                         "datatype": "State",
                         "deathlink": bool("DeathLink" in self.tags),
-                        "location_hint_amounts": {k: len(v) for k, v in self.location_hints_remaining.items()},
+                        "traplink": bool("TrapLink" in self.tags),
                         "hint_cost": self.hint_cost,
                         "missing_locations": list(
                             [location_from_code(location).name for location in self.missing_locations]),
-                        "checked_locations": list(
-                            [location_from_code(loc).name for loc in self.checked_locations]),
+                        "checked_locations": self.stored_save_data,
                     }
 
                     items_list = []
@@ -321,6 +388,7 @@ class CotNDContext(CommonContext):
                         })
 
                     state_packet["items"] = items_list
+                    state_packet["world_version"] = self.slotdata.get("world_version", "")
                     self.last_received_index = len(self.items_received)
                     # If the initial state, send initial state + search for shop locations
                     if data.get("init", False):
@@ -383,10 +451,12 @@ class CotNDContext(CommonContext):
 
                     await self.cotnd_server.send_packet(state_packet)
 
-                    # Get own hints to filter out already hinted locations
+                    # Retrieve stored save data so we can restore player-verified checks on reconnect.
                     await self.send_msgs([{
                         "cmd": "Get",
-                        "keys": [f"_read_hints_{self.team}_{self.slot}"]
+                        "keys": [
+                            f"cotnd_{self.slot}_save",
+                        ]
                     }])
                 case "Death":
                     print("Sending a death!", self.tags)
@@ -408,6 +478,24 @@ class CotNDContext(CommonContext):
 
                         self.locations_checked.update(resolved_ids)
                     await self.send_msgs([{"cmd": "LocationChecks", "locations": self.locations_checked}])
+
+                    # Persist only the checks the player actually made so reconnects and other
+                    # players' releases cannot contaminate the save data with unearned progress.
+                    if self.slot is not None:
+                        checked_names: list[str] = []
+                        for loc_id in self.locations_checked:
+                            try:
+                                checked_names.append(location_from_code(loc_id).name)
+                            except (KeyError, ValueError):
+                                pass
+                        self.stored_save_data = checked_names
+                        await self.send_msgs([{
+                            "cmd": "Set",
+                            "key": f"cotnd_{self.slot}_save",
+                            "default": [],
+                            "operations": [{"operation": "replace", "value": checked_names}],
+                            "want_reply": False
+                        }])
                 case "ScoutLocation":
                     loc_id = data.get("id")
                     if loc_id and (loc_id in self.missing_locations or loc_id in self.locations_checked):
@@ -416,48 +504,14 @@ class CotNDContext(CommonContext):
                             "locations": [loc_id]
                         }])
                 case "Hint":
-                    hint_types = data.get("type", "Random")
-
-                    # Normalize to list
-                    if isinstance(hint_types, str):
-                        hint_types = [hint_types]
-                    elif not isinstance(hint_types, (list, tuple, set)):
-                        hint_types = ["Random"]
-
-                    # Nothing to hint if all sets are empty
-                    if not any(self.location_hints_remaining.values()):
+                    if not self.missing_locations:
                         return
 
-                    chosen_locations = []
-
-                    for hint_type in hint_types:
-                        chosen_type = hint_type
-
-                        if hint_type == "Random":
-                            keys_with_avail = [k for k, locs in self.location_hints_remaining.items() if locs]
-                            if not keys_with_avail:
-                                continue
-                            chosen_type = random.choice(keys_with_avail)
-
-                        if chosen_type in self.location_hints_remaining:
-                            available = list(self.location_hints_remaining[chosen_type])
-                            if available:
-                                loc_id = random.choice(available)
-
-                                # Remove immediately so we don’t repeat it before server confirms
-                                self.location_hints_remaining[chosen_type].discard(loc_id)
-
-                                chosen_locations.append(loc_id)
-
-                    # Send one batch if we found any
-                    if chosen_locations:
-                        await self.send_msgs([{"cmd": "LocationScouts", "locations": chosen_locations}])
-                        await self.send_msgs([{
-                            "cmd": "CreateHints",
-                            "locations": chosen_locations,
-                            "status": HintStatus.HINT_PRIORITY
-                        }])
-
+                    self._hint_requested = True
+                    await self.send_msgs([{
+                        "cmd": "Get",
+                        "keys": [f"_read_hints_{self.team}_{self.slot}"],
+                    }])
                 case "Chat":
                     await self.send_msgs([{"cmd": "Say", "text": str(data.get("msg", ""))}])
                 case "Victory":
@@ -507,6 +561,7 @@ class CotNDServer:
         self.port = 0
         self._server: asyncio.AbstractServer | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._write_lock = asyncio.Lock()
         self.data_path = get_data_folder_path()
         self.cotnd_connected = False
         self._zstd_dctx = zstandard.ZstdDecompressor(
@@ -540,9 +595,13 @@ class CotNDServer:
         # 3) Prefix length (big-endian uint32)
         header = struct.pack(">I", len(compressed))
 
-        # 4) Send to all connected clients
-        writer.write(header + compressed)
-        await writer.drain()
+        # 4) Serialize writes: concurrent drain() is unsafe on Python < 3.10.
+        #    Multiple tasks (LocationInfo, ReceivedItems, PrintJSON, etc.) can all
+        #    call send_packet concurrently via asyncio.create_task; the lock ensures
+        #    only one write+drain pair is in flight at a time.
+        async with self._write_lock:
+            writer.write(header + compressed)
+            await writer.drain()
 
     async def _safe_close_writer(self):
         writer = self._writer
@@ -622,7 +681,8 @@ class CotNDServer:
         match datatype:
             case "State":
                 init = bool(getattr(packet, "init", False))
-                await self.ctx.manage_event(datatype, {"init": init})
+                game_index = getattr(packet, "last_ap_index", None)
+                await self.ctx.manage_event(datatype, {"init": init, "game_last_received_index": game_index})
             case "Victory":
                 if not self.ctx.finished_game:
                     await self.ctx.manage_event(datatype)
@@ -649,6 +709,20 @@ class CotNDServer:
                 await self.ctx.manage_event(datatype, {"type": hint_type})
             case "Disconnected" | "Disconnect":
                 await self.ctx.manage_event("Disconnected")
+            case "SetDeathLink":
+                enabled = bool(getattr(packet, "deathlink", False))
+                asyncio.create_task(self.ctx.update_death_link(enabled), name="Update DeathLink")
+                asyncio.create_task(self.ctx.cotnd_server.send_packet({
+                    "datatype": "SetDeathLink",
+                    "deathlink": enabled
+                }))
+            case "SetTrapLink":
+                enabled = bool(getattr(packet, "traplink", False))
+                asyncio.create_task(self.ctx.update_trap_link(enabled), name="Update TrapLink")
+                asyncio.create_task(self.ctx.cotnd_server.send_packet({
+                    "datatype": "SetTrapLink",
+                    "traplink": enabled
+                }))
             case _:
                 return
 

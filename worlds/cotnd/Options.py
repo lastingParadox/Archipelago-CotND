@@ -71,7 +71,7 @@ class ZonesGoalClear(Range):
 
     display_name = "Amount required for Zones Goal"
     range_start = 1
-    range_end = 95
+    range_end = 100
     default = 40
 
 
@@ -263,16 +263,77 @@ class TrapPercentage(Range):
 
 
 _default_trap_weights = {
-    "Camera Trap": 2,
-    "Confusion Trap": 7,
-    "Dad Trap": 2,
+    "144p Trap": 7,
+    "AAA Trap": 7,
+    "Animal Trap": 4,
+    "Armadillo Trap": 6,
+    "Bald Trap": 9,
+    "Beetle Trap": 6,
+    "Bomb Trap": 2,
+    "Bonk Trap": 4,
+    "Burn Trap": 5,
+    "Camera Trap": 7,
+    "Chaos Trap": 4,
+    "Commando Trap": 2,
+    "Confusion Trap": 3,
+    "Cursed Trap": 3,
+    "Cutscene Trap": 7,
+    "Dad Trap": 4,
+    "Damage Trap": 7,
     "Dead Ringer Trap": 1,
-    "Gold Scatter Trap": 6,
-    "Haunted Shopkeeper Trap": 4,
-    "Monkey Trap": 10,
-    "No Return Trap": 3,
-    "Skeleton Trap": 5,
+    "Disable Trap": 5,
+    "Disarm Trap": 4,
+    "Double Damage Trap": 2,
+    "Earth Trap": 7,
+    "Exposition Trap": 6,
+    "Fake Transition Trap": 6,
+    "Fast Trap": 2,
+    "Flip Horizontal Trap": 6,
+    "Flip Vertical Trap": 6,
+    "Frame Slime Trap": 9,
+    "Freeze Trap": 5,
+    "Gold Scatter Trap": 8,
+    "Haunted Shopkeeper Trap": 7,
+    "Help Trap": 4,
+    "Hiccup Trap": 6,
+    "Home Trap": 6,
+    "Ice Floor Trap": 3,
+    "Instant Death Trap": 0,
+    "Invisible Trap": 8,
+    "Isometric Trap": 4,
+    "Jump Trap": 5,
+    "Laughter Trap": 7,
+    "Leaping Trap": 4,
+    "Market Crash Trap": 3,
+    "Meteor Trap": 2,
+    "Monkey Trap": 6,
+    "My Turn Trap": 2,
+    "No Return Trap": 4,
+    "No Revivals Trap": 3,
+    "One Hit Trap": 1,
+    "Paper Trap": 8,
+    "Person Trap": 8,
+    "Satiated Trap": 3,
+    "Shake Trap": 7,
+    "Shrink Trap": 3,
+    "Skeleton Trap": 7,
+    "Slime Player Trap": 8,
+    "Slip Trap": 5,
+    "Slow Trap": 2,
+    "Spotlight Trap": 4,
+    "Sticky Hands Trap": 4,
+    "Stone Trap": 5,
+    "Swap Trap": 4,
+    "Tar Trap": 5,
+    "Teleport Trap": 4,
     "Tempo Trap": 7,
+    "Timer Trap": 3,
+    "Transmute Trap": 4,
+    "Tutorial Trap": 0,
+    "Undo Trap": 4,
+    "W I D E Trap": 9,
+    "Zoom In Trap": 6,
+    "Zoom Out Trap": 6,
 }
 
 
@@ -281,6 +342,8 @@ class TrapWeights(OptionCounter):
     Specify the weights determining how many copies of each trap item will be in your itempool.
     If you don't want a specific type of trap, you can set the weight for it to 0.
     If you set all trap weights to 0, you will get no traps, bypassing the "Trap Percentage" option.
+    For a full description of each trap's effects and severity, see:
+    https://github.com/lastingParadox/Archipelago-CotND/blob/crypt-of-the-necrodancer/worlds/cotnd/docs/traps.md
     """
 
     display_name = "Trap Weights"
@@ -290,6 +353,12 @@ class TrapWeights(OptionCounter):
 
     default = _default_trap_weights
 
+class TrapLink(Toggle):
+    """
+    When you receive a trap, everyone who enabled trap link also receives a trap. Of course, the reverse is true too.
+    You will not receive traps that you have set to 0 in the trap_weights option. Default is false.
+    """
+    display_name = "Trap Link"
 
 # Pricing Options
 class PriceRandomization(Choice):
@@ -403,6 +472,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     lock_character_room: LockCharacterRoom
     trap_percentage: TrapPercentage
     trap_weights: TrapWeights
+    trap_link: TrapLink
     price_randomization: PriceRandomization
     randomized_price_min: RandomizedPriceMin
     randomized_price_max: RandomizedPriceMax

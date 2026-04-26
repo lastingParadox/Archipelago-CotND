@@ -1,3 +1,6 @@
+import json
+import os
+import pkgutil
 from copy import copy
 from typing import Mapping, Any, cast
 
@@ -88,6 +91,9 @@ class CotNDWorld(World):
     skeletons, dragons, and rapping moles. Descend into the crypt to defeat the NecroDancer and claim the Golden Lute!
     """
 
+    _archipelago_json_data = pkgutil.get_data(__name__, "archipelago.json")
+    apworld_version: str = json.loads(_archipelago_json_data).get("world_version", "0.0.0")
+
     game = "Crypt of the NecroDancer"
     options_dataclass = CotNDOptions
     options: CotNDOptions  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -95,7 +101,6 @@ class CotNDWorld(World):
     required_client_version = (0, 6, 1)
     item_name_groups = item_name_groups
     location_name_groups = location_name_groups
-    location_hint_codes: dict[str, dict[str, list[int | None]]] = {}
     topology_present = True
 
     item_name_to_id = {item.name: item.code for item in all_items}
@@ -314,40 +319,6 @@ class CotNDWorld(World):
             caged_npc_locations=self.caged_npc_locations,
         )
 
-    def post_fill(self):
-        hint_name_map = {
-            ItemType.CHARACTER: "Character",
-            ItemType.ARMOR: "Armor",
-            ItemType.WEAPON: "Weapon",
-            ItemType.UPGRADE: "Upgrade",
-            ItemType.HEAD: "Armor",
-            ItemType.FEET: "Armor",
-        }
-
-        hints = self.location_hint_codes[self.player_name] = {
-            "Character": [],
-            "Armor": [],
-            "Weapon": [],
-            "Upgrade": [],
-        }
-
-        for sphere in self.multiworld.get_spheres():
-            for location in sphere:
-                loc_item = location.item
-                if (
-                    loc_item is None
-                    or loc_item.game != "Crypt of the NecroDancer"
-                    or loc_item.player != self.player
-                    or loc_item.code is None
-                ):
-                    continue
-
-                item = self.item_from_code[loc_item.code]
-
-                hint_key = hint_name_map.get(item.type)
-                if hint_key is not None:
-                    hints[hint_key].append(location.address)
-
     def fill_slot_data(self) -> Mapping[str, Any]:
         fill = self.options.as_dict(
             "death_link",
@@ -373,13 +344,15 @@ class CotNDWorld(World):
             "zone_access_keys",
             "lock_character_room",
             "include_materials",
+            "trap_weights",
+            "trap_link"
         )
 
         # fill["item_by_code"] = self.item_from_code
         fill["caged_npc_locations"] = self.caged_npc_locations
-        fill["location_hint_codes"] = self.location_hint_codes[self.player_name]
         fill["starting_zone"] = self.starting_zone
         fill["starting_character"] = self.starting_character_name
+        fill["world_version"] = self.apworld_version
 
         return fill
 
