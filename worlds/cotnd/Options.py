@@ -43,13 +43,15 @@ class DeathLinkType(Choice):
 # Goal Options
 class Goal(Choice):
     """What goal to set for the Crypt of the NecroDancer multiworld. Default is Zones.
-    All_Zones: Clear ALl Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear". Recommended for experienced players, as this can be challenging.
+    All_Zones: Clear All Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear". Recommended for experienced players, as this can be challenging.
     Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks. Recommended for a quicker and less challenging experience.
+    Golden_Lute_Shards: Collect X Golden Lute Shard items, where X is the value put for "Golden Lute Shards Goal Clear". Will disable "All Zones" checks. The shards are shuffled into the multiworld.
     """
 
     display_name = "Goal"
     option_All_Zones = 0
     option_Zones = 1
+    option_Golden_Lute_Shards = 2
     default = 1
 
 
@@ -61,7 +63,7 @@ class AllZonesGoalClear(Range):
     display_name = "Characters Required for All Zones Goal"
     range_start = 1
     range_end = 20
-    default = 8
+    default = 6
 
 
 class ZonesGoalClear(Range):
@@ -72,7 +74,39 @@ class ZonesGoalClear(Range):
     display_name = "Amount required for Zones Goal"
     range_start = 1
     range_end = 100
-    default = 40
+    default = 30
+
+
+class GoldenLuteShardsGoalClear(Range):
+    """Determines how many Golden Lute Shards must be collected for the Golden Lute Shards goal. Default is 10."""
+
+    display_name = "Amount required for Golden Lute Shards Goal"
+    range_start = 1
+    range_end = 50
+    default = 10
+
+
+class VictoryTrigger(Choice):
+    """Determines what must be completed to trigger victory. All zones must be unlocked to access either mode.
+    Ensemble: Complete an Ensemble Run with your unlocked characters.
+    Boss_Rush: Defeat all zone bosses in sequence (4, or 5 with Amplified enabled). The first boss room starts with a Red, Black, and Purple chest.
+    Expensive_Purchase: Buy an expensive item in the AP lobby for a configurable diamond cost, once the goal has been met.
+    Default is Ensemble."""
+
+    display_name = "Victory Trigger"
+    option_Ensemble = 0
+    option_Boss_Rush = 1
+    option_Expensive_Purchase = 2
+    default = 0
+
+
+class ExpensivePurchasePrice(Range):
+    """Diamond cost of the Expensive Purchase when Victory Trigger is set to Expensive Purchase. Default is 150."""
+
+    display_name = "Expensive Purchase Price"
+    range_start = 1
+    range_end = 1000
+    default = 150
 
 
 class FloorClearChecks(DefaultOnToggle):
@@ -249,6 +283,14 @@ class LockCharacterRoom(Toggle):
     display_name = "Lock Character Room"
 
 
+class BuffItems(Toggle):
+    """When enabled, buff shrines can only be activated after receiving both the character item and their corresponding buff item.
+    Otherwise, only the character is required to toggle a character's buff.
+    Default is false."""
+
+    display_name = "Buff Items"
+
+
 # Trap Options
 class TrapPercentage(Range):
     """
@@ -263,77 +305,42 @@ class TrapPercentage(Range):
 
 
 _default_trap_weights = {
-    "144p Trap": 70,
-    "AAA Trap": 70,
     "Animal Trap": 40,
-    "Armadillo Trap": 60,
     "Bald Trap": 90,
-    "Beetle Trap": 60,
     "Bomb Trap": 20,
-    "Bonk Trap": 40,
-    "Burn Trap": 50,
     "Camera Trap": 70,
     "Chaos Trap": 40,
-    "Commando Trap": 20,
     "Confusion Trap": 30,
     "Cursed Trap": 30,
     "Cutscene Trap": 70,
     "Dad Trap": 40,
     "Damage Trap": 70,
     "Dead Ringer Trap": 10,
-    "Disable Trap": 50,
     "Disarm Trap": 40,
     "Double Damage Trap": 20,
     "Earth Trap": 70,
-    "Exposition Trap": 60,
-    "Fake Transition Trap": 60,
-    "Fast Trap": 20,
-    "Flip Horizontal Trap": 60,
-    "Flip Vertical Trap": 60,
-    "Frame Slime Trap": 90,
     "Freeze Trap": 50,
     "Gold Scatter Trap": 80,
     "Haunted Shopkeeper Trap": 70,
-    "Help Trap": 40,
-    "Hiccup Trap": 60,
-    "Home Trap": 60,
+    "Hot Coals Trap": 50,
     "Ice Floor Trap": 30,
-    "Instant Death Trap": 0,
-    "Invisible Trap": 80,
     "Isometric Trap": 40,
-    "Jump Trap": 50,
-    "Laughter Trap": 70,
     "Leaping Trap": 40,
     "Market Crash Trap": 30,
-    "Meteor Trap": 20,
     "Monkey Trap": 60,
-    "My Turn Trap": 20,
     "No Return Trap": 40,
-    "No Revivals Trap": 30,
     "One Hit Trap": 10,
-    "Paper Trap": 80,
-    "Person Trap": 80,
-    "Satiated Trap": 30,
     "Shake Trap": 70,
     "Shrink Trap": 30,
-    "Skeleton Trap": 70,
-    "Slime Player Trap": 80,
-    "Slip Trap": 50,
-    "Slow Trap": 20,
     "Spotlight Trap": 40,
-    "Sticky Hands Trap": 40,
-    "Stone Trap": 50,
+    "Summon Trap": 70,
     "Swap Trap": 40,
     "Tar Trap": 50,
     "Teleport Trap": 40,
     "Tempo Trap": 70,
     "Timer Trap": 30,
     "Transmute Trap": 40,
-    "Tutorial Trap": 0,
     "Undo Trap": 40,
-    "W I D E Trap": 90,
-    "Zoom In Trap": 60,
-    "Zoom Out Trap": 60,
 }
 
 
@@ -359,6 +366,18 @@ class TrapLink(Toggle):
     You will not receive traps that you have set to 0 in the trap_weights option. Default is false.
     """
     display_name = "Trap Link"
+
+
+class TrapLinkExcludedTraps(OptionSet):
+    """
+    Traps that can never be triggered by an incoming TrapLink trap, listed by their handler ID.
+    Only applies to TrapLink-only traps (traps without a pool item); pool traps are excluded by
+    setting their trap_weights entry to 0 instead. For the full list of handler IDs, see:
+    https://github.com/lastingParadox/Archipelago-CotND/blob/crypt-of-the-necrodancer/worlds/cotnd/docs/traps.md
+    """
+
+    display_name = "TrapLink Excluded Traps"
+    default = frozenset({"InstantDeathTrap", "TutorialTrap"})
 
 # Pricing Options
 class PriceRandomization(Choice):
@@ -455,6 +474,9 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     goal: Goal
     all_zones_goal_clear: AllZonesGoalClear
     zones_goal_clear: ZonesGoalClear
+    golden_lute_shards_goal_clear: GoldenLuteShardsGoalClear
+    victory_trigger: VictoryTrigger
+    expensive_purchase_price: ExpensivePurchasePrice
     floor_clear_checks: FloorClearChecks
     dlc: DLC
     death_link_type: DeathLinkType
@@ -470,9 +492,11 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     zone_access_keys: ZoneAccessKeys
     starting_zone: StartingZone
     lock_character_room: LockCharacterRoom
+    buff_items: BuffItems
     trap_percentage: TrapPercentage
     trap_weights: TrapWeights
     trap_link: TrapLink
+    traplink_excluded_traps: TrapLinkExcludedTraps
     price_randomization: PriceRandomization
     randomized_price_min: RandomizedPriceMin
     randomized_price_max: RandomizedPriceMax
@@ -491,6 +515,9 @@ option_groups = [
             Goal,
             AllZonesGoalClear,
             ZonesGoalClear,
+            GoldenLuteShardsGoalClear,
+            VictoryTrigger,
+            ExpensivePurchasePrice,
             FloorClearChecks,
         ],
     ),
@@ -525,6 +552,7 @@ option_groups = [
             CharacterUnlocks,
             IncludeUniqueEquipment,
             LockCharacterRoom,
+            BuffItems,
         ],
     ),
     OptionGroup("Trap Options", [TrapPercentage, TrapWeights]),

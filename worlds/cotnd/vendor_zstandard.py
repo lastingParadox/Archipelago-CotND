@@ -1,24 +1,41 @@
 import os
 import sys
 import zipfile
+import zipimport
 import platform
 import tempfile
 import shutil
 import uuid
 
-def load_vendored_zstandard(bundle_path: str) -> None:
+def load_vendored_zstandard() -> None:
     """
-    Extracts vendored zstandard from the given bundle (.apworld/zip)
-    and adds it to sys.path for runtime import.
+    Ensures zstandard is importable, either from the environment or from the
+    vendored binaries bundled inside the .apworld zip.
 
-    Handles:
-      - Windows/Linux/MacOs
-      - Python 3.11–3.13
-      - Frozen apps and multiprocessing
-      - Avoids .pyd locking issues by using unique extraction folders
+    Tries a system/environment install first, then falls back to extracting
+    the appropriate binary for the current OS and Python version from the
+    apworld archive. The archive path is derived automatically from this
+    module's own loader, so no external path argument is needed.
     """
+
     if "zstandard" in sys.modules:
         return
+
+    try:
+        __import__("zstandard")
+        return
+    except ImportError:
+        pass
+
+    loader = globals().get("__loader__")
+    if not isinstance(loader, zipimport.zipimporter):
+        raise RuntimeError(
+            "zstandard is not installed and this module is not running from "
+            "inside an .apworld zip. Install zstandard via pip, or use the "
+            ".apworld bundle."
+        )
+
+    bundle_path = loader.archive
 
     py_tag = f"py{sys.version_info.major}{sys.version_info.minor}"
 
@@ -63,11 +80,12 @@ def load_vendored_zstandard(bundle_path: str) -> None:
                 extracted_any = True
 
     if not extracted_any:
-        raise RuntimeError(f"No zstandard binaries found for {os_key}_{py_tag}")
+        raise RuntimeError(
+            f"No vendored zstandard binaries found for {os_key} in {bundle_path}. "
+            f"This build may not support your platform or Python version."
+        )
 
-    # Add the extracted folder to sys.path
-    sys.path.insert(0, os.path.join(extract_root))
+    sys.path.insert(0, extract_root)
 
-    # Optional: clean up on exit (works only if no child processes are still using the files)
     import atexit
     atexit.register(lambda: shutil.rmtree(extract_root, ignore_errors=True))

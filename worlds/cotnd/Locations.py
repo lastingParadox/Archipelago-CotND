@@ -35,6 +35,7 @@ class LocationType(Enum):
     NPC = auto()
     ALL_ZONES_EVENT = auto()
     ZONES_EVENT = auto()
+    ENSEMBLE_EVENT = auto()
 
 
 PLURALS: dict[LocationType, str] = {
@@ -151,8 +152,6 @@ def generate_zone_clear_locations(characters: list[CotNDItemData]):
                                          zone))
             elif zone == 1 and char_name == "Aria":
                 zone_locations.append(
-                    RawCotNDLocationData(f"{char_name} - Dead Ringer", LocationType.UNIQUE_BOSS, char_name, required, zone))
-                zone_locations.append(
                     RawCotNDLocationData(f"{char_name} - Golden Lute", LocationType.UNIQUE_BOSS, char_name, required, zone))
 
     zone_locations.extend(
@@ -162,20 +161,16 @@ def generate_zone_clear_locations(characters: list[CotNDItemData]):
     return zone_locations
 
 
-def generate_extra_mode_locations(characters: list[CotNDItemData]):
+def generate_extra_mode_locations():
     locations: list[RawCotNDLocationData] = []
 
     for mode_dlc, modes in EXTRA_MODES.items():
         dlc_enum = DLC(mode_dlc)
+        required = _required_dlcs(dlc_enum)
 
-        for char in characters:
-            char_name = char.name
-            # Location requires all non-BASE DLCs: the character's and the mode's.
-            required = _required_dlcs(char.dlc, dlc_enum)
-
-            for mode in modes:
-                locations.append(
-                    RawCotNDLocationData(f"{char_name} - {mode}", LocationType.EXTRA_MODE, char_name, required, None))
+        for mode in modes:
+            locations.append(
+                RawCotNDLocationData(f"{mode} Mode", LocationType.EXTRA_MODE, None, required, None))
 
     return locations
 
@@ -193,7 +188,12 @@ def generate_event_locations(characters: list[CotNDItemData]):
                 RawCotNDLocationData(f"{char.name} - Beat Zone {zone}", LocationType.ZONES_EVENT, char.name, required,
                                      zone))
 
-    return all_zones + zones
+    ensemble = [
+        RawCotNDLocationData("Ensemble Completion", LocationType.ENSEMBLE_EVENT, None, frozenset(), None),
+        RawCotNDLocationData("Boss Rush Completion", LocationType.ENSEMBLE_EVENT, None, frozenset(), None),
+        RawCotNDLocationData("Expensive Purchase Completion", LocationType.ENSEMBLE_EVENT, None, frozenset(), None),
+    ]
+    return all_zones + zones + ensemble
 
 
 def load_all_locations():
@@ -203,7 +203,7 @@ def load_all_locations():
     npc_locations = generate_npc_locations()
     codex_locs = generate_codex_locations()
     zone_locs = generate_zone_clear_locations(characters)
-    extra_mode_locs = generate_extra_mode_locations(characters)
+    extra_mode_locs = generate_extra_mode_locations()
     event_locs = generate_event_locations(characters)
 
     all_locs = shop_locs + npc_locations + codex_locs + zone_locs + extra_mode_locs + event_locs
@@ -223,7 +223,7 @@ def load_all_locations():
                 name=loc.name,
                 type=loc.type,
                 code=BASE_CODE + index if loc.type not in (
-                    LocationType.ALL_ZONES_EVENT, LocationType.ZONES_EVENT) else None,
+                    LocationType.ALL_ZONES_EVENT, LocationType.ZONES_EVENT, LocationType.ENSEMBLE_EVENT) else None,
                 character=loc.character,
                 required_dlcs=loc.required_dlcs,
                 zone=loc.zone
@@ -248,7 +248,7 @@ def location_from_code(code: int):
 
 
 def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_blacklist: Set[str], goal: int,
-                       extra_modes: Set[str], codex_checks: bool, per_level: bool):
+                       extra_modes: Set[str], codex_checks: bool, per_level: bool, victory_trigger: int = 0):
     dlc_enums = normalize_dlc(dlc)
     location_list = []
 
@@ -265,11 +265,11 @@ def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_
         if location.character is not None and location.character in character_blacklist:
             continue
 
-        # Remove All Zones checks if the goal is just zones
-        if goal == 1 and (location.type is LocationType.ALL_ZONES or location.type is LocationType.ALL_ZONES_EVENT):
+        # Remove All Zones checks if the goal is not All Zones
+        if goal in (1, 2) and (location.type is LocationType.ALL_ZONES or location.type is LocationType.ALL_ZONES_EVENT):
             continue
-        # Remove Zone events if the goal is All Zones
-        elif goal == 0 and location.type is LocationType.ZONES_EVENT:
+        # Remove Zone events if the goal is All Zones or Golden Lute Shards
+        elif goal in (0, 2) and location.type is LocationType.ZONES_EVENT:
             continue
 
         # Remove zone complete checks
@@ -282,13 +282,18 @@ def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_
 
         # Remove checks not in extra_modes
         if location.type is LocationType.EXTRA_MODE:
-            _, mode = location.name.split(" - ", 1)
-            if mode not in extra_modes:
+            if location.name.removesuffix(" Mode") not in extra_modes:
                 continue
 
         # Remove tutorial checks if disabled
         if not codex_checks and location.type is LocationType.TUTORIAL:
             continue
+
+        # Keep only the victory event location that matches the trigger
+        if location.type is LocationType.ENSEMBLE_EVENT:
+            trigger_location = {0: "Ensemble Completion", 1: "Boss Rush Completion", 2: "Expensive Purchase Completion"}
+            if location.name != trigger_location.get(victory_trigger, "Ensemble Completion"):
+                continue
 
         location_list.append(location)
 

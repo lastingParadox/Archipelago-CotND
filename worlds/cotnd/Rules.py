@@ -1,183 +1,173 @@
-from typing import Any, Dict, List
+from __future__ import annotations
 
-from BaseClasses import MultiWorld
-from worlds.cotnd.Items import DefaultType, CotNDItemData
-from worlds.cotnd.Locations import CotNDLocationData, LocationType
-from worlds.generic.Rules import set_rule, add_rule
+import dataclasses
+from typing import TYPE_CHECKING, ClassVar
+
+from BaseClasses import CollectionState
+from rule_builder.rules import Has, HasAll, Rule, True_
+from worlds.cotnd.Items import DefaultType
+from worlds.cotnd.Locations import LocationType
 from worlds.cotnd.Utils import character_requirements
 
-
-def set_soft_shop_rules(world: MultiWorld, player: int, location: CotNDLocationData):
-    if location.type is not LocationType.SHOP:
-        return
-
-    loc = world.get_location(location.name, player)
-
-    # Extract shopkeeper and index
-    shopkeeper, rest = location.name.split(" - ", 1)
-    index = int(rest.split(" Shop Item ")[1])
-
-    # Base rule: stock unlocks for index > 1
-    if index != 1:
-        set_rule(
-            loc,
-            lambda state, req=index - 1: state.has("Shop Stock Unlock", player, req),
-        )
-
-    # Merlin-specific rule
-    if shopkeeper == "Merlin":
-        add_rule(loc, lambda state: state.has("Merlin", player))
+if TYPE_CHECKING:
+    from worlds.cotnd import CotNDWorld
 
 
-def set_rules(
-    world: MultiWorld,
-    player: int,
-    locations: List[CotNDLocationData],
-    item_from_name: Dict[str, CotNDItemData],
-    goal_clear_req: int,
-    character_unlocks: str,
-    include_unique: bool,
-    zone_access_keys: str = "disabled",
-    starting_zone: int = 1,
-    lock_character_room: bool = False,
-    starting_character: str = "",
-    caged_npc_locations: dict[str, dict[str, Any]] | None = None,
-):
-    max_zone = max((location.zone or 0) for location in locations)
+@dataclasses.dataclass()
+class ZoneGate(Rule["CotNDWorld"], game="Crypt of the NecroDancer"):
+    """Gates a location to a specific zone based on the zone_access_keys option."""
 
-    all_zones_types = (LocationType.ALL_ZONES, LocationType.ALL_ZONES_EVENT)
+    zone: int
+    character: str | None = None
 
-    def has_zone_access(state, zone: int, character: str | None = None) -> bool:
-        if zone_access_keys == "separate":
-            return state.has(f"Zone {zone} Access", player)
-        if zone_access_keys == "progressive":
-            if character == "Aria":
-                # Aria clears zones in reverse order (high -> low).
-                required = max(0, max_zone - zone)
-            else:
-                required = max(0, zone - 1)
-            return state.has("Progressive Zone Access", player, required)
-        return True
+    def _instantiate(self, world: CotNDWorld) -> Rule.Resolved:
+        zone_access_keys = world.options.zone_access_keys.current_key
+        starting_zone = world.starting_zone
+        max_zone = max((loc.zone or 0) for loc in world.locations)
 
-    def zone_requires_key(zone: int, character: str | None = None) -> bool:
         if zone_access_keys == "disabled":
-            return False
+            return True_().resolve(world)
+
         if zone_access_keys == "separate":
-            return zone != starting_zone
-        if character == "Aria":
-            # Keep Starting Zone semantics by mirroring Aria's reverse route.
+            if self.zone == starting_zone:
+                return True_().resolve(world)
+            return Has(f"Zone {self.zone} Access").resolve(world)
+
+        # progressive
+        if self.character == "Aria":
+            # Aria clears zones in reverse order (high -> low).
             aria_start_zone = max_zone - starting_zone + 1
-            return zone < aria_start_zone
-        return zone > starting_zone
+            if self.zone >= aria_start_zone:
+                return True_().resolve(world)
+            required = max(0, max_zone - self.zone)
+        else:
+            if self.zone <= starting_zone:
+                return True_().resolve(world)
+            required = max(0, self.zone - 1)
 
-    def add_zone_gate_rule(loc, zone: int, character: str | None = None):
-        if zone_requires_key(zone, character):
-            add_rule(loc, lambda state, z=zone, c=character: has_zone_access(state, z, c))
+        if required == 0:
+            return True_().resolve(world)
+        return Has("Progressive Zone Access", required).resolve(world)
 
-    def add_full_zone_access_rule(loc):
+    class Resolved(Rule.Resolved):
+        skip_cache: ClassVar[bool] = True
+
+        def _evaluate(self, state: CollectionState) -> bool:
+            return False  # Never reached; _instantiate always delegates to another rule
+
+
+@dataclasses.dataclass()
+class FullZoneAccess(Rule["CotNDWorld"], game="Crypt of the NecroDancer"):
+    """Requires access to all zones (used for All Zones completion locations)."""
+
+    def _instantiate(self, world: CotNDWorld) -> Rule.Resolved:
+        zone_access_keys = world.options.zone_access_keys.current_key
+        if zone_access_keys == "disabled":
+            return True_().resolve(world)
+        max_zone = max((loc.zone or 0) for loc in world.locations)
         if zone_access_keys == "separate":
-            add_rule(
-                loc,
-                lambda state, mz=max_zone: all(
-                    state.has(f"Zone {z} Access", player) for z in range(1, mz + 1)
-                ),
-            )
-        elif zone_access_keys == "progressive":
-            add_rule(
-                loc,
-                lambda state, req=max(0, max_zone - 1): state.has(
-                    "Progressive Zone Access", player, req
-                ),
-            )
+            return HasAll(*(f"Zone {z} Access" for z in range(1, max_zone + 1))).resolve(world)
+        # progressive: need max_zone - 1 keys to unlock all zones
+        return Has("Progressive Zone Access", max(0, max_zone - 1)).resolve(world)
 
-    for location in locations:
-        loc = world.get_location(location.name, player)
-        # Character Locations
-        if location.type in (
-            LocationType.FLOOR,
-            LocationType.BOSS,
-            LocationType.UNIQUE_BOSS,
-            LocationType.ZONE,
-            LocationType.ALL_ZONES,
-            LocationType.ALL_ZONES_EVENT,
-            LocationType.ZONES_EVENT,
-        ):
+    class Resolved(Rule.Resolved):
+        skip_cache: ClassVar[bool] = True
+
+        def _evaluate(self, state: CollectionState) -> bool:
+            return False  # Never reached; _instantiate always delegates to another rule
+
+
+def set_rules(world: CotNDWorld) -> None:
+    zone_access_keys = world.options.zone_access_keys.current_key
+    if world.options.goal == "all_zones":
+        goal_clear_req = world.options.all_zones_goal_clear.value
+    elif world.options.goal == "golden_lute_shards":
+        goal_clear_req = world.options.golden_lute_shards_goal_clear.value
+    else:
+        goal_clear_req = world.options.zones_goal_clear.value
+
+    all_zones_types = (LocationType.ALL_ZONES, LocationType.ALL_ZONES_EVENT, LocationType.EXTRA_MODE)
+    character_location_types = (
+        LocationType.FLOOR,
+        LocationType.BOSS,
+        LocationType.UNIQUE_BOSS,
+        LocationType.ZONE,
+        LocationType.ALL_ZONES,
+        LocationType.ALL_ZONES_EVENT,
+        LocationType.ZONES_EVENT,
+    )
+
+    for location in world.locations:
+        rule: Rule[CotNDWorld] | None = None
+
+        if location.type in character_location_types:
             if location.character is None:
                 continue
-
-            set_rule(loc, lambda state, c=location.character: state.has(c, player))
-
+            rule = Has(location.character)
             if (
-                character_unlocks != "item_only"
+                world.options.character_unlocks != "item_only"
                 and location.character in character_requirements
             ):
                 for requirement in character_requirements[location.character]:
-                    if requirement in item_from_name:
-                        item = item_from_name[requirement]
-                        if item.default is not DefaultType.UNIQUE or include_unique:
-                            add_rule(loc, lambda state, i=item: state.has(i.name, player))
-            continue
+                    if requirement in world.item_from_name:
+                        item_data = world.item_from_name[requirement]
+                        if item_data.default is not DefaultType.UNIQUE or bool(world.options.include_unique_items.value):
+                            rule = rule & Has(item_data.name)
 
-        if location.type is LocationType.EXTRA_MODE:
-            if location.character is None:
-                continue
+        elif location.type is LocationType.EXTRA_MODE:
+            rule = Has(location.name)
 
-            mode_short = location.name.split(" - ")[1]
-            mode_item = mode_short + " Mode"
-            set_rule(
-                loc,
-                lambda state, c=location.character, m=mode_item: state.has(c, player)
-                and state.has(m, player),
-            )
-            continue
+        elif location.type is LocationType.SHOP:
+            shopkeeper, rest = location.name.split(" - ", 1)
+            index = int(rest.split(" Shop Item ")[1])
+            if index != 1:
+                rule = Has("Shop Stock Unlock", index - 1)
+            if shopkeeper == "Merlin":
+                merlin_rule: Rule[CotNDWorld] = Has("Merlin")
+                rule = merlin_rule if rule is None else rule & merlin_rule
 
-        if location.type is LocationType.SHOP:
-            set_soft_shop_rules(world, player, location)
-            continue
+        elif location.type is LocationType.TUTORIAL:
+            rule = Has("Codex")
 
-        if location.type is LocationType.TUTORIAL:
-            set_rule(loc, lambda state: state.has("Codex", player))
-
-    # All Zones checks require full zone access progression when zone keys are enabled.
-    for location in locations:
+        # Zone access
         if location.type in all_zones_types:
-            add_full_zone_access_rule(world.get_location(location.name, player))
+            zone_rule: Rule[CotNDWorld] = FullZoneAccess()
+            rule = zone_rule if rule is None else rule & zone_rule
+        elif location.zone is not None:
+            zone_rule = ZoneGate(location.zone, location.character)
+            rule = zone_rule if rule is None else rule & zone_rule
 
-    # Zone Access Key rules: gate each zone behind its own key item
-    for location in locations:
-        if location.zone is not None:
-            add_zone_gate_rule(
-                world.get_location(location.name, player),
-                location.zone,
-                location.character,
-            )
+        # Character Room Key
+        if (
+            world.options.lock_character_room
+            and world.starting_character_name
+            and location.character is not None
+            and location.character != world.starting_character_name
+            and location.type not in (LocationType.SHOP, LocationType.TUTORIAL, LocationType.NPC)
+        ):
+            key_rule: Rule[CotNDWorld] = Has("Character Room Key")
+            rule = key_rule if rule is None else rule & key_rule
 
-    # Character Room Key rules: gate all non-starting characters behind the key
-    if lock_character_room and starting_character:
-        for location in locations:
-            if location.character is None or location.character == starting_character:
-                continue
-            if location.type in (
-                LocationType.SHOP,
-                LocationType.TUTORIAL,
-                LocationType.NPC,
-            ):
-                continue
-            loc = world.get_location(location.name, player)
-            add_rule(loc, lambda state: state.has("Character Room Key", player))
+        if rule is not None:
+            world.set_rule(world.get_location(location.name), rule)
 
     # Caged NPC locations need zone access to the zone they're physically in
-    if caged_npc_locations and zone_access_keys != "disabled":
-        for npc_name, npc_info in caged_npc_locations.items():
+    if world.caged_npc_locations and zone_access_keys != "disabled":
+        for npc_name, npc_info in world.caged_npc_locations.items():
             npc_zone = npc_info.get("zone")
             if npc_zone:
-                loc_name = f"Caged {npc_name}"
                 try:
-                    loc = world.get_location(loc_name, player)
-                    add_zone_gate_rule(loc, npc_zone)
+                    loc = world.get_location(f"Caged {npc_name}")
+                    world.set_rule(loc, ZoneGate(npc_zone))
                 except KeyError:
                     pass  # Location doesn't exist (might be filtered out)
 
-    world.completion_condition[player] = lambda state: state.has(
-        "Complete", player, goal_clear_req
-    )
+    if world.options.goal == "golden_lute_shards":
+        ensemble_rule = Has("Golden Lute Shard", goal_clear_req) & FullZoneAccess()
+    else:
+        ensemble_rule = Has("Complete", goal_clear_req) & FullZoneAccess()
+    trigger_location = {0: "Ensemble Completion", 1: "Boss Rush Completion", 2: "Expensive Purchase Completion"}
+    victory_location = trigger_location.get(world.options.victory_trigger.value, "Ensemble Completion")
+    world.set_rule(world.get_location(victory_location), ensemble_rule)
+    world.set_completion_rule(Has("Victory"))
+

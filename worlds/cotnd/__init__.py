@@ -92,7 +92,7 @@ class CotNDWorld(World):
     """
 
     _archipelago_json_data = pkgutil.get_data(__name__, "archipelago.json")
-    apworld_version: str = json.loads(_archipelago_json_data).get("world_version", "0.0.0")
+    apworld_version: str = json.loads(_archipelago_json_data or "").get("world_version", "0.0.0")
 
     game = "Crypt of the NecroDancer"
     options_dataclass = CotNDOptions
@@ -116,6 +116,7 @@ class CotNDWorld(World):
     items: list[CotNDItemData] = []
     locations: list[CotNDLocationData] = []
     caged_npc_locations: dict[str, dict[str, Any]] = {}
+    npc_hint_locations = {}
     starting_zone: int = 1
     starting_character_name: str = ""
 
@@ -181,6 +182,7 @@ class CotNDWorld(World):
             included_modes,
             bool(self.options.include_codex_checks.value),
             bool(self.options.floor_clear_checks.value),
+            self.options.victory_trigger.value,
         )
 
         # NOW remove the precollected zone keys from the pool (after location generation)
@@ -205,6 +207,14 @@ class CotNDWorld(World):
         self.items = get_shop_stock_unlocks(self.items, shop_index)
 
         self.chars = get_available_characters(blacklist, self.dlcs)
+
+        if self.options.buff_items:
+            for char in self.chars:
+                self.items.append(self.item_from_name[f"{char.name} Buff"])
+
+        if self.options.goal == "golden_lute_shards":
+            for _ in range(self.options.golden_lute_shards_goal_clear.value):
+                self.items.append(self.item_from_name["Golden Lute Shard"])
 
         # Cap certain values
         cap_option(self.options, "all_zones_goal_clear", len(self.chars))
@@ -269,6 +279,10 @@ class CotNDWorld(World):
                         f"{character.name} - Beat Zone {i}"
                     ).place_locked_item(self.create_event("Complete"))
 
+        trigger_location = {0: "Ensemble Completion", 1: "Boss Rush Completion", 2: "Expensive Purchase Completion"}
+        victory_location = trigger_location.get(self.options.victory_trigger.value, "Ensemble Completion")
+        self.get_location(victory_location).place_locked_item(self.create_event("Victory"))
+
         # Lock Lobby NPC items to locations
         if not self.options.lobby_npc_items:
             locked_npcs = set(LOBBY_NPCS)
@@ -298,26 +312,26 @@ class CotNDWorld(World):
         return CotNDItem(event, ItemClassification.progression, None, self.player)
 
     def set_rules(self) -> None:
-        goal_clear_req = (
-            self.options.all_zones_goal_clear.value
-            if self.options.goal == "all_zones"
-            else self.options.zones_goal_clear.value
-        )
+        set_rules(self)
 
-        set_rules(
-            self.multiworld,
-            self.player,
-            self.locations,
-            self.item_from_name,
-            goal_clear_req,
-            self.options.character_unlocks.current_key,
-            bool(self.options.include_unique_items.value),
-            zone_access_keys=self.options.zone_access_keys.current_key,
-            starting_zone=self.starting_zone,
-            lock_character_room=bool(self.options.lock_character_room.value),
-            starting_character=self.starting_character_name,
-            caged_npc_locations=self.caged_npc_locations,
-        )
+    def post_fill(self):
+        npc_hints = self.npc_hint_locations[self.player_name] = {}
+
+        for sphere in self.multiworld.get_spheres():
+            for location in sphere:
+                location_item = location.item
+                if location_item is None or location_item.game != "Crypt of the NecroDancer" or location_item.player != self.player or location_item.code is None:
+                    continue
+                
+                item = self.item_from_code[location_item.code]
+
+                if item.type == ItemType.NPC:
+                    npc_hints[item.cotnd_id] = {
+                        "LocationCode": location.address,
+                        "LocationName": location.name,
+                        "PlayerName": self.multiworld.get_player_name(location.player),
+                        "PlayerSlot": location.player,
+                    }
 
     def fill_slot_data(self) -> Mapping[str, Any]:
         fill = self.options.as_dict(
@@ -345,7 +359,12 @@ class CotNDWorld(World):
             "lock_character_room",
             "include_materials",
             "trap_weights",
-            "trap_link"
+            "trap_link",
+            "traplink_excluded_traps",
+            "buff_items",
+            "golden_lute_shards_goal_clear",
+            "victory_trigger",
+            "expensive_purchase_price",
         )
 
         # fill["item_by_code"] = self.item_from_code
@@ -353,6 +372,7 @@ class CotNDWorld(World):
         fill["starting_zone"] = self.starting_zone
         fill["starting_character"] = self.starting_character_name
         fill["world_version"] = self.apworld_version
+        fill["npc_hint_locations"] = self.npc_hint_locations[self.player_name]
 
         return fill
 
