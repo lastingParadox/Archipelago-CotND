@@ -121,7 +121,7 @@ def set_rules(world: CotNDWorld) -> None:
             shopkeeper, rest = location.name.split(" - ", 1)
             index = int(rest.split(" Shop Item ")[1])
             if index != 1:
-                rule = Has("Shop Stock Unlock", index - 1)
+                rule = Has("Shop Restock", index - 1)
             if shopkeeper == "Merlin":
                 merlin_rule: Rule[CotNDWorld] = Has("Merlin")
                 rule = merlin_rule if rule is None else rule & merlin_rule

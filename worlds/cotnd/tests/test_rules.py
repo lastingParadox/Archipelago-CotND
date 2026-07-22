@@ -278,7 +278,7 @@ class TestCharacterRequirementsItemOnly(CotNDTestBase):
 # ---------------------------------------------------------------------------
 
 class TestShopStockRules(CotNDTestBase):
-    """Shop items beyond the first row require Shop Stock Unlock items."""
+    """Shop items beyond the first row require Shop Restock items."""
 
     options = {"zone_access_keys": "disabled"}
 
@@ -287,12 +287,12 @@ class TestShopStockRules(CotNDTestBase):
 
     def test_second_shop_item_requires_one_unlock(self) -> None:
         self.assertFalse(self.can_reach_location("Hephaestus - Center Shop Item 2"))
-        self.collect_by_name("Shop Stock Unlock")
+        self.collect_by_name("Shop Restock")
         self.assertTrue(self.can_reach_location("Hephaestus - Center Shop Item 2"))
 
     def test_third_shop_item_requires_two_unlocks(self) -> None:
-        unlocks = self.get_items_by_name("Shop Stock Unlock")
-        self.assertGreaterEqual(len(unlocks), 2, "Need at least 2 Shop Stock Unlock items in pool")
+        unlocks = self.get_items_by_name("Shop Restock")
+        self.assertGreaterEqual(len(unlocks), 2, "Need at least 2 Shop Restock items in pool")
         self.multiworld.state.collect(unlocks[0])
         self.assertFalse(self.can_reach_location("Hephaestus - Center Shop Item 3"))
         self.multiworld.state.collect(unlocks[1])

@@ -519,7 +519,7 @@ upgrades: list[RawCotNDItemData] = [
                      DLC.BASE, DefaultType.NEVER),
     RawCotNDItemData("Golden Lute Shard", ItemClassification.progression, ItemType.UPGRADE, "APGoldenLuteShard",
                      DLC.BASE, DefaultType.NEVER),
-    RawCotNDItemData("Shop Stock Unlock", ItemClassification.progression, ItemType.UPGRADE, "APShopStock", DLC.BASE,
+    RawCotNDItemData("Shop Restock", ItemClassification.progression, ItemType.UPGRADE, "APShopStock", DLC.BASE,
                      DefaultType.NEVER),
     RawCotNDItemData("Zone 1 Access", ItemClassification.progression, ItemType.UPGRADE, "APZone1Access", DLC.BASE,
                      DefaultType.NEVER),
@@ -720,7 +720,7 @@ def item_from_code(code: int):
 
 def get_shop_stock_unlocks(items: list[CotNDItemData], index: int):
     for _ in range(index - 1):
-        items.append(ITEMS_BY_NAME["Shop Stock Unlock"])
+        items.append(ITEMS_BY_NAME["Shop Restock"])
 
     return items
 
@@ -791,7 +791,7 @@ def build_master_world_items(
 
 # Items managed outside the standard population pipeline and added conditionally
 AP_SYSTEM_ITEMS: frozenset[str] = frozenset({
-    "Shop Stock Unlock",
+    "Shop Restock",
     "Zone 1 Access",
     "Zone 2 Access",
     "Zone 3 Access",
