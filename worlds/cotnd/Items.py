@@ -318,7 +318,7 @@ weapons: list[RawCotNDItemData] = [
                      DefaultType.UNIQUE),
     RawCotNDItemData("Lance of Courage", ItemClassification.useful, ItemType.WEAPON, "Sync_WeaponLance", DLC.SYNCHRONY,
                      DefaultType.UNIQUE),
-    RawCotNDItemData("Leek", ItemClassification.useful, ItemType.WEAPON, "Coldsteel_WeaponLeek", DLC.MIKU,
+    RawCotNDItemData("Spring Onion", ItemClassification.useful, ItemType.WEAPON, "Coldsteel_WeaponLeek", DLC.MIKU,
                      DefaultType.UNIQUE)
 ]
 
@@ -901,6 +901,13 @@ def get_npc_items():
     return npc_list
 
 
+# Alternate names accepted in server commands (e.g. !hint). Each becomes a
+# single-item name group, so `!hint <alias>` resolves to the real item.
+ITEM_ALIASES: dict[str, str] = {
+    "Leek": "Spring Onion",  # Spring Onion was formerly named "Leek"
+}
+
+
 def make_item_groups() -> dict[str, set[str]]:
     groups: dict[str, set[str]] = defaultdict(set)
 
@@ -909,6 +916,10 @@ def make_item_groups() -> dict[str, set[str]]:
             continue
         group_name = PLURALS[item.type]
         groups[group_name].add(item.name)
+
+    for alias, target in ITEM_ALIASES.items():
+        if target in ITEMS_BY_NAME:
+            groups[alias].add(target)
 
     return dict(groups)
 

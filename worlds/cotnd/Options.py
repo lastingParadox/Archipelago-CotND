@@ -38,7 +38,7 @@ class DeathLinkType(Choice):
     option_Absolute = 0
     option_Tempo = 1
     option_Marv = 2
-    default = 1
+    default = option_Tempo
 
 # Goal Options
 class Goal(Choice):
@@ -52,7 +52,7 @@ class Goal(Choice):
     option_All_Zones = 0
     option_Zones = 1
     option_Golden_Lute_Shards = 2
-    default = 1
+    default = option_Zones
 
 
 class AllZonesGoalClear(Range):
@@ -88,16 +88,18 @@ class GoldenLuteShardsGoalClear(Range):
 
 class VictoryTrigger(Choice):
     """Determines what must be completed to trigger victory. All zones must be unlocked to access either mode.
-    Ensemble: Complete an Ensemble Run with your unlocked characters.
+    Disabled: Victory is sent automatically as soon as the goal is met, with no additional catalyst step.
+    Ensemble: Complete an Ensemble Mode Run with your unlocked characters.
     Boss_Rush: Defeat all zone bosses in sequence (4, or 5 with Amplified enabled). The first boss room starts with a Red, Black, and Purple chest.
     Expensive_Purchase: Buy an expensive item in the AP lobby for a configurable diamond cost, once the goal has been met.
     Default is Ensemble."""
 
     display_name = "Victory Trigger"
-    option_Ensemble = 0
-    option_Boss_Rush = 1
-    option_Expensive_Purchase = 2
-    default = 0
+    option_Disabled = 0
+    option_Ensemble = 1
+    option_Boss_Rush = 2
+    option_Expensive_Purchase = 3
+    default = option_Ensemble
 
 
 class ExpensivePurchasePrice(Range):
@@ -113,7 +115,6 @@ class FloorClearChecks(DefaultOnToggle):
     """Determines whether zone clear checks are split per floor (e.g., 1-1, 1-2, 1-3, Boss) instead of just a single 'Zone X' check. Default is true."""
 
     display_name = "Floor Clear Checks"
-    aliases = ["per_level_zone_clears"]
 
 
 # Content Options
@@ -174,7 +175,7 @@ class StartingInventory(NamedRange):
     range_start = 0
     range_end = 100
     special_range_names = {"vanilla": 100, "half": 50, "reduced": 33, "minimum": 0}
-    default = 33
+    default = special_range_names["reduced"]
 
 
 # Zone Access
@@ -189,7 +190,7 @@ class ZoneAccessKeys(Choice):
     option_disabled = 0
     option_separate = 1
     option_progressive = 2
-    default = 0
+    default = option_disabled
 
 
 class StartingZone(Choice):
@@ -205,7 +206,7 @@ class StartingZone(Choice):
     option_zone_3 = 3
     option_zone_4 = 4
     option_zone_5 = 5
-    default = 1
+    default = option_zone_1
 
 
 # Character Options
@@ -239,7 +240,7 @@ class StartingCharacter(Choice):
     option_Suzu = 17
     option_Hatsune_Miku = 18
     option_Shovel_Knight = 19
-    default = 0
+    default = option_Cadence
 
 
 class CharacterBlacklist(OptionSet):
@@ -264,7 +265,7 @@ class CharacterUnlocks(Choice):
     option_Item_Only = 0
     option_Required_Items_Soft = 1
     option_Required_Items_Hard = 2
-    default = 0
+    default = option_Item_Only
 
 
 class IncludeUniqueEquipment(Toggle):
@@ -394,7 +395,7 @@ class PriceRandomization(Choice):
     option_Vanilla_Rand = 1
     option_Item_Class = 2
     option_Complete = 3
-    default = 0
+    default = option_Vanilla
 
 
 class RandomizedPriceMin(Range):

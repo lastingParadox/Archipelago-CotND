@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 from BaseClasses import CollectionState
 from rule_builder.rules import Has, HasAll, Rule, True_
 from worlds.cotnd.Items import DefaultType
-from worlds.cotnd.Locations import LocationType
+from worlds.cotnd.Locations import LocationType, VICTORY_TRIGGER_LOCATIONS
 from worlds.cotnd.Utils import character_requirements
 
 if TYPE_CHECKING:
@@ -166,8 +166,11 @@ def set_rules(world: CotNDWorld) -> None:
         ensemble_rule = Has("Golden Lute Shard", goal_clear_req) & FullZoneAccess()
     else:
         ensemble_rule = Has("Complete", goal_clear_req) & FullZoneAccess()
-    trigger_location = {0: "Ensemble Completion", 1: "Boss Rush Completion", 2: "Expensive Purchase Completion"}
-    victory_location = trigger_location.get(world.options.victory_trigger.value, "Ensemble Completion")
-    world.set_rule(world.get_location(victory_location), ensemble_rule)
-    world.set_completion_rule(Has("Victory"))
+    victory_location = VICTORY_TRIGGER_LOCATIONS.get(world.options.victory_trigger.current_key)
+    if victory_location is not None:
+        world.set_rule(world.get_location(victory_location), ensemble_rule)
+        world.set_completion_rule(Has("Victory"))
+    else:
+        # Disabled: no catalyst location; meeting the goal itself completes the run.
+        world.set_completion_rule(ensemble_rule)
 

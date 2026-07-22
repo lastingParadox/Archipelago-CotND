@@ -35,7 +35,7 @@ class LocationType(Enum):
     NPC = auto()
     ALL_ZONES_EVENT = auto()
     ZONES_EVENT = auto()
-    ENSEMBLE_EVENT = auto()
+    VICTORY_EVENT = auto()
 
 
 PLURALS: dict[LocationType, str] = {
@@ -189,9 +189,9 @@ def generate_event_locations(characters: list[CotNDItemData]):
                                      zone))
 
     ensemble = [
-        RawCotNDLocationData("Ensemble Completion", LocationType.ENSEMBLE_EVENT, None, frozenset(), None),
-        RawCotNDLocationData("Boss Rush Completion", LocationType.ENSEMBLE_EVENT, None, frozenset(), None),
-        RawCotNDLocationData("Expensive Purchase Completion", LocationType.ENSEMBLE_EVENT, None, frozenset(), None),
+        RawCotNDLocationData("Ensemble Completion", LocationType.VICTORY_EVENT, None, frozenset(), None),
+        RawCotNDLocationData("Boss Rush Completion", LocationType.VICTORY_EVENT, None, frozenset(), None),
+        RawCotNDLocationData("Expensive Purchase Completion", LocationType.VICTORY_EVENT, None, frozenset(), None),
     ]
     return all_zones + zones + ensemble
 
@@ -223,7 +223,7 @@ def load_all_locations():
                 name=loc.name,
                 type=loc.type,
                 code=BASE_CODE + index if loc.type not in (
-                    LocationType.ALL_ZONES_EVENT, LocationType.ZONES_EVENT, LocationType.ENSEMBLE_EVENT) else None,
+                    LocationType.ALL_ZONES_EVENT, LocationType.ZONES_EVENT, LocationType.VICTORY_EVENT) else None,
                 character=loc.character,
                 required_dlcs=loc.required_dlcs,
                 zone=loc.zone
@@ -247,8 +247,15 @@ def location_from_code(code: int):
     return LOCATIONS_BY_CODE[code]
 
 
+VICTORY_TRIGGER_LOCATIONS: dict[str, str] = {
+    "ensemble": "Ensemble Completion",
+    "boss_rush": "Boss Rush Completion",
+    "expensive_purchase": "Expensive Purchase Completion",
+}
+
+
 def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_blacklist: Set[str], goal: int,
-                       extra_modes: Set[str], codex_checks: bool, per_level: bool, victory_trigger: int = 0):
+                       extra_modes: Set[str], codex_checks: bool, per_level: bool, victory_trigger: str = "Ensemble"):
     dlc_enums = normalize_dlc(dlc)
     location_list = []
 
@@ -289,10 +296,8 @@ def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_
         if not codex_checks and location.type is LocationType.TUTORIAL:
             continue
 
-        # Keep only the victory event location that matches the trigger
-        if location.type is LocationType.ENSEMBLE_EVENT:
-            trigger_location = {0: "Ensemble Completion", 1: "Boss Rush Completion", 2: "Expensive Purchase Completion"}
-            if location.name != trigger_location.get(victory_trigger, "Ensemble Completion"):
+        if location.type is LocationType.VICTORY_EVENT:
+            if location.name != VICTORY_TRIGGER_LOCATIONS.get(victory_trigger):
                 continue
 
         location_list.append(location)

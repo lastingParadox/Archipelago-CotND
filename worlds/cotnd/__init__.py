@@ -1,7 +1,5 @@
 import json
-import os
 import pkgutil
-from copy import copy
 from typing import Mapping, Any, cast
 
 from BaseClasses import Tutorial, Region, ItemClassification, MultiWorld
@@ -33,6 +31,7 @@ from worlds.cotnd.Locations import (
     LocationType,
     CotNDLocation,
     CotNDLocationData,
+    VICTORY_TRIGGER_LOCATIONS,
 )
 from worlds.cotnd.Options import CotNDOptions
 from worlds.cotnd.Regions import cotnd_regions, get_regions_to_locations
@@ -182,7 +181,7 @@ class CotNDWorld(World):
             included_modes,
             bool(self.options.include_codex_checks.value),
             bool(self.options.floor_clear_checks.value),
-            self.options.victory_trigger.value,
+            self.options.victory_trigger.current_key,
         )
 
         # NOW remove the precollected zone keys from the pool (after location generation)
@@ -279,9 +278,9 @@ class CotNDWorld(World):
                         f"{character.name} - Beat Zone {i}"
                     ).place_locked_item(self.create_event("Complete"))
 
-        trigger_location = {0: "Ensemble Completion", 1: "Boss Rush Completion", 2: "Expensive Purchase Completion"}
-        victory_location = trigger_location.get(self.options.victory_trigger.value, "Ensemble Completion")
-        self.get_location(victory_location).place_locked_item(self.create_event("Victory"))
+        victory_location = VICTORY_TRIGGER_LOCATIONS.get(self.options.victory_trigger.current_key)
+        if victory_location is not None:
+            self.get_location(victory_location).place_locked_item(self.create_event("Victory"))
 
         # Lock Lobby NPC items to locations
         if not self.options.lobby_npc_items:
@@ -368,6 +367,7 @@ class CotNDWorld(World):
         )
 
         # fill["item_by_code"] = self.item_from_code
+        fill["victory_trigger"] = self.options.victory_trigger.current_key
         fill["caged_npc_locations"] = self.caged_npc_locations
         fill["starting_zone"] = self.starting_zone
         fill["starting_character"] = self.starting_character_name
