@@ -278,9 +278,8 @@ class CotNDWorld(World):
                         f"{character.name} - Beat Zone {i}"
                     ).place_locked_item(self.create_event("Complete"))
 
-        victory_location = VICTORY_TRIGGER_LOCATIONS.get(self.options.victory_trigger.current_key)
-        if victory_location is not None:
-            self.get_location(victory_location).place_locked_item(self.create_event("Victory"))
+        victory_location = VICTORY_TRIGGER_LOCATIONS[self.options.victory_trigger.current_key]
+        self.get_location(victory_location).place_locked_item(self.create_event("Victory"))
 
         # Lock Lobby NPC items to locations
         if not self.options.lobby_npc_items:

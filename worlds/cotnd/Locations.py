@@ -188,12 +188,13 @@ def generate_event_locations(characters: list[CotNDItemData]):
                 RawCotNDLocationData(f"{char.name} - Beat Zone {zone}", LocationType.ZONES_EVENT, char.name, required,
                                      zone))
 
-    ensemble = [
+    victory = [
+        RawCotNDLocationData("Goal Completion", LocationType.VICTORY_EVENT, None, frozenset(), None),
         RawCotNDLocationData("Ensemble Completion", LocationType.VICTORY_EVENT, None, frozenset(), None),
         RawCotNDLocationData("Boss Rush Completion", LocationType.VICTORY_EVENT, None, frozenset(), None),
         RawCotNDLocationData("Expensive Purchase Completion", LocationType.VICTORY_EVENT, None, frozenset(), None),
     ]
-    return all_zones + zones + ensemble
+    return all_zones + zones + victory
 
 
 def load_all_locations():
@@ -247,7 +248,13 @@ def location_from_code(code: int):
     return LOCATIONS_BY_CODE[code]
 
 
+# VictoryTrigger option key -> the VICTORY_EVENT location that hosts the "Victory"
+# event. Every trigger (including Disabled) has one so completion is uniformly
+# Has("Victory") and the playthrough always ends on a Victory. The trigger only
+# changes the mod's in-game catalyst, not AP logic. Keyed by option key (not
+# number) so reordering the option stays safe.
 VICTORY_TRIGGER_LOCATIONS: dict[str, str] = {
+    "disabled": "Goal Completion",
     "ensemble": "Ensemble Completion",
     "boss_rush": "Boss Rush Completion",
     "expensive_purchase": "Expensive Purchase Completion",

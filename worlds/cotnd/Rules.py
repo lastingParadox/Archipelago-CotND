@@ -166,11 +166,9 @@ def set_rules(world: CotNDWorld) -> None:
         ensemble_rule = Has("Golden Lute Shard", goal_clear_req) & FullZoneAccess()
     else:
         ensemble_rule = Has("Complete", goal_clear_req) & FullZoneAccess()
-    victory_location = VICTORY_TRIGGER_LOCATIONS.get(world.options.victory_trigger.current_key)
-    if victory_location is not None:
-        world.set_rule(world.get_location(victory_location), ensemble_rule)
-        world.set_completion_rule(Has("Victory"))
-    else:
-        # Disabled: no catalyst location; meeting the goal itself completes the run.
-        world.set_completion_rule(ensemble_rule)
+    # Every trigger (incl. Disabled -> "Goal Completion") has a victory location
+    # gated by the goal rule; the mod enforces the actual in-game catalyst.
+    victory_location = VICTORY_TRIGGER_LOCATIONS[world.options.victory_trigger.current_key]
+    world.set_rule(world.get_location(victory_location), ensemble_rule)
+    world.set_completion_rule(Has("Victory"))
 
