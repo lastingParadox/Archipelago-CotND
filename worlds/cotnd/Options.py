@@ -74,7 +74,7 @@ class ZonesGoalClear(Range):
     display_name = "Amount required for Zones Goal"
     range_start = 1
     range_end = 100
-    default = 30
+    default = 24
 
 
 class GoldenLuteShardsGoalClear(Range):

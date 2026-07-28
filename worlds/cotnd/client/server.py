@@ -16,6 +16,7 @@ from CommonClient import logger
 if TYPE_CHECKING:
     from worlds.cotnd.client.context import CotNDContext
 from worlds.cotnd.Locations import location_from_code
+from worlds.cotnd.Utils import MIN_MOD_VERSION, version_at_least
 from worlds.cotnd.vendor_zstandard import load_vendored_zstandard
 
 load_vendored_zstandard()
@@ -118,6 +119,7 @@ class CotNDServer:
         self._write_lock = asyncio.Lock()
         self.data_path = get_data_folder_path()
         self.cotnd_connected = False
+        self._disconnect_reason: str | None = None
         self._zstd_dctx = zstandard.ZstdDecompressor(
             format=zstandard.FORMAT_ZSTD1_MAGICLESS
         )
@@ -148,7 +150,7 @@ class CotNDServer:
             pass
 
     def server_print(self, text: str):
-        print("[CotNDServer]: " + text)
+        logger.debug("[CotNDServer]: " + text)
 
     """Sending Packets"""
 
@@ -230,7 +232,11 @@ class CotNDServer:
                     datatype.value, {"location_code": loc_code, "player_slot": player_slot}
                 )
             case PacketDatatype.DISCONNECT:
+                reason = getattr(packet, "reason", None)
+                if reason:
+                    self._disconnect_reason = str(reason)
                 await self.ctx.manage_event("Disconnected")
+                await self._safe_close_writer()
             case PacketDatatype.SET_DEATHLINK:
                 enabled = bool(getattr(packet, "deathlink", False))
                 asyncio.create_task(
@@ -272,6 +278,26 @@ class CotNDServer:
         identity = raw.decode("utf-8", errors="replace")
         self.server_print(f"Client identity: {identity}")
         self.cotnd_connected = True
+
+        _, _, mod_version = identity.partition(":") or [0, 0, ""]
+        version_text = mod_version == '' and 'pre v3.1.0' or 'v' + mod_version
+        if not version_at_least(mod_version, MIN_MOD_VERSION):
+            message = (
+                f"Your AP Redux mod ({version_text}) is too old for this apworld "
+                f"(requires v{MIN_MOD_VERSION}+). Update the mod in-game "
+                f"(Mods > right-click AP Redux > manage versions) and reconnect."
+            )
+            logger.error(
+                f"[CotNDServer] Rejecting incompatible mod version: "
+                f"{version_text} < v{MIN_MOD_VERSION}"
+            )
+            self._disconnect_reason = f"Incompatible mod version {version_text} < required v{MIN_MOD_VERSION}"
+            await self.send_packet({"datatype": "Chat", "msg": message, "player": "Archipelago"})
+            await self.send_packet({"datatype": "Disconnected", "reason": message})
+            await self._safe_close_writer()
+            self.cotnd_connected = False
+            return
+
         # Send a new framed response
         player_name = (
             self.ctx.player_names[self.ctx.slot] if self.ctx.slot is not None else ""
@@ -284,6 +310,7 @@ class CotNDServer:
                 "slot": self.ctx.slot,
             }
         )
+        self.ctx.log_goal_progress()
 
     async def _handle_client(self, reader: StreamReader, writer: StreamWriter):
         addr = writer.get_extra_info("peername")
@@ -330,10 +357,10 @@ class CotNDServer:
         except Exception:
             logger.exception("[CotNDServer] Unexpected client error")
         finally:
+            reason = self._disconnect_reason or "Mod Disconnect"
+            self._disconnect_reason = None
             self.server_print(f"Disconnected {addr}")
-            logger.info(
-                "Disconnected from Crypt of the NecroDancer (Reason: Mod Disconnect)"
-            )
+            logger.info(f"Disconnected from Crypt of the NecroDancer (Reason: {reason})")
             self.cotnd_connected = False
             await self._safe_close_writer()
 

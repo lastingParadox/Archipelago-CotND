@@ -1,6 +1,27 @@
+import json
+import pkgutil
+import re
 from enum import Enum
 from random import Random
 from typing import Iterable, Dict, Any, Set
+
+# Minimum AP Redux mod version this apworld will accept a connection from.
+# Kept in archipelago.json (next to world_version)
+_archipelago_metadata: dict = json.loads(
+    pkgutil.get_data(__name__, "archipelago.json") or b"{}"
+)
+MIN_MOD_VERSION: str = _archipelago_metadata.get("minimum_mod_version", "0.0.0")
+
+
+def parse_version(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in re.findall(r"\d+", version or ""))
+
+
+def version_at_least(actual: str, minimum: str) -> bool:
+    if actual == "":
+        return False
+    return parse_version(actual) >= parse_version(minimum)
+
 
 LOBBY_NPCS = ["Codex", "Merlin", "Hintmaster", "Janitor", "Diamond Dealer"]
 EXTRA_MODES = {

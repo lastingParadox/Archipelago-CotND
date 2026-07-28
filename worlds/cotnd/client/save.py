@@ -268,7 +268,7 @@ class CotNDSaveData:
             elif cotnd_id == "APProgressiveZoneAccess":
                 progressive_count += 1
 
-        if zone_access_keys == 1:  # progressive mode
+        if zone_access_keys == 2:  # progressive mode (ZoneAccessKeys.option_progressive)
             access["progressiveCount"] = progressive_count
             for z in range(1, progressive_count + 1):
                 access[str(z)] = True

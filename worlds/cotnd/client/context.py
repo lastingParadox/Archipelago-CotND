@@ -86,6 +86,12 @@ class CotNDCommandProcessor(ClientCommandProcessor):
         for line in json.dumps(self.ctx.ap_savedata.to_datastorage(), indent=2, default=str).splitlines():
             logger.info(line)
 
+    def _cmd_goal(self):
+        """Print progress towards the goal and the victory condition."""
+        if not isinstance(self.ctx, CotNDContext):
+            return
+        self.ctx.log_goal_progress()
+
 
 class CotNDContext(CommonContext):
     game = "Crypt of the NecroDancer"
@@ -115,7 +121,6 @@ class CotNDContext(CommonContext):
         class CotNDManager(GameManager):
             logging_pairs = [
                 ("Client", "Archipelago"),
-                ("CotNDInterface", "Crypt of the NecroDancer"),
             ]
             base_title = "Archipelago Crypt of the NecroDancer Client"
 
@@ -155,6 +160,14 @@ class CotNDContext(CommonContext):
             logger.warning(f"Failed to send disconnect notice: {e}")
         if self.cotnd_server.is_running():
             await self.cotnd_server.stop()
+
+        self.locations_checked = set()
+        self.locations_scouted = set()
+        self.finished_game = False
+        self.stored_data_notification_keys = set()
+        self.last_forwarded_index = 0
+        self.game_last_received_index = None
+
         await super().disconnect(allow_autoreconnect)
 
     def on_deathlink(self, data: Dict[str, str]):
@@ -203,6 +216,39 @@ class CotNDContext(CommonContext):
         if self.slotdata.get("trap_link", False):
             self.tags.add("TrapLink")
         asyncio.create_task(self.cotnd_server.start(), name="CotNDServer")
+
+    def log_goal_progress(self) -> None:
+        self.ap_savedata.refresh()
+        sd = self.slotdata
+        goal_int = sd.get("goal")
+        if goal_int == 0:
+            goal_type, required = "All Zones", sd.get("all_zones_goal_clear", 0)
+        elif goal_int == 2:
+            goal_type, required = "Golden Lute Shards", sd.get("golden_lute_shards_goal_clear", 0)
+        else:
+            goal_type, required = "Zones", sd.get("zones_goal_clear", 0)
+
+        if goal_type == "Golden Lute Shards":
+            progress = self.ap_savedata.golden_lute_shards
+        else:
+            progress = 0
+            for char_locs in self.ap_savedata.character_locations.values():
+                for key, value in char_locs.items():
+                    if not value:
+                        continue
+                    if goal_type == "Zones" and key.startswith("Zone ") and key[5:].isdigit():
+                        progress += 1
+                    elif goal_type == "All Zones" and key == "All Zones":
+                        progress += 1
+
+        victory_trigger_names = {
+            "disabled": "Disabled",
+            "ensemble": "Ensemble",
+            "boss_rush": "Boss Rush",
+            "expensive_purchase": "Expensive Purchase",
+        }
+        victory_trigger = victory_trigger_names.get(sd.get("victory_trigger", ""), "Ensemble")
+        logger.info(f"Goal Progress: {goal_type} ({progress}/{required}) | Victory condition: {victory_trigger}")
 
     def _on_received_items(self, args: dict):
         """Forward newly received items to the mod and refresh computed save state."""
@@ -394,8 +440,6 @@ class CotNDContext(CommonContext):
         try:
             match datatype:
                 case "State":
-                    # Mod is (re)connecting — defer full State response until
-                    # DataStorage retrieval restores non-derivable save state.
                     game_index = data.get("game_last_received_index")
                     if game_index is not None:
                         self.game_last_received_index = int(game_index)
@@ -478,8 +522,6 @@ class CotNDContext(CommonContext):
         await self.send_msgs([{"cmd": "LocationChecks", "locations": self.locations_checked}])
 
         # Recompute fields that depend on the checked-locations set.
-        # Pass locations_checked (locally updated) so the new IDs are included before
-        # the server echoes them back via RoomUpdate (which updates checked_locations).
         self.ap_savedata.character_locations = self.ap_savedata._compute_character_locations(
             extra_checked_locs=self.locations_checked,
         )
