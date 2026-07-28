@@ -287,10 +287,7 @@ class CotNDServer:
                 f"(requires v{MIN_MOD_VERSION}+). Update the mod in-game "
                 f"(Mods > right-click AP Redux > manage versions) and reconnect."
             )
-            logger.error(
-                f"[CotNDServer] Rejecting incompatible mod version: "
-                f"{version_text} < v{MIN_MOD_VERSION}"
-            )
+            self.server_print(f"Rejecting incompatible mod version: {version_text} < v{MIN_MOD_VERSION}")
             self._disconnect_reason = f"Incompatible mod version {version_text} < required v{MIN_MOD_VERSION}"
             await self.send_packet({"datatype": "Chat", "msg": message, "player": "Archipelago"})
             await self.send_packet({"datatype": "Disconnected", "reason": message})
@@ -353,9 +350,9 @@ class CotNDServer:
             ConnectionResetError,
             ConnectionAbortedError,
         ):
-            logger.info("[CotNDServer] Client disconnected")
+            self.server_print("Client disconnected")
         except Exception:
-            logger.exception("[CotNDServer] Unexpected client error")
+            self.server_print("Unexpected client error")
         finally:
             reason = self._disconnect_reason or "Mod Disconnect"
             self._disconnect_reason = None
@@ -391,13 +388,13 @@ class CotNDServer:
         with open(self.data_path + "/port.txt", "w") as _:
             pass
 
-        logger.info("[CotNDServer] Shutting down")
+        self.server_print("Shutting down")
         self._server.close()
 
         try:
             await self._server.wait_closed()
         except Exception as e:
-            logger.error(f"[CotNDServer] Error closing server: {e}")
+            self.server_print(f"Error closing server: {e}")
         self._server = None
         self.cotnd_connected = False
 
