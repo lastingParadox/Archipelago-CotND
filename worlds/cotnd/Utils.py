@@ -48,9 +48,6 @@ def assign_caged_npcs(random: Random, dlc: Set[str]) -> Dict[str, Dict[str, Any]
     npc_zones = [zones[i % len(zones)] for i in range(len(LOBBY_NPCS))]
     random.shuffle(npc_zones)
 
-    # Random levels
-    npc_levels = [random.choice(levels) for _ in LOBBY_NPCS]
-
     # Ensure each unlockType is used at least once
     unlock_types = ["Shop", "Dig", "Glass"]
     remaining = len(LOBBY_NPCS) - len(unlock_types)
@@ -66,11 +63,19 @@ def assign_caged_npcs(random: Random, dlc: Set[str]) -> Dict[str, Dict[str, Any]
     all_unlocks = unlock_types + weighted_choices
     random.shuffle(all_unlocks)
 
-    # Adjust levels so Glass is only on 2 or 3
+    # Fill each zone's floors before doubling any of them up
+    used_levels: Dict[int, Set[int]] = {}
     adjusted_levels = []
-    for level, unlock in zip(npc_levels, all_unlocks):
-        if unlock == "Glass" and level == 1:
-            level = random.choice([2, 3])
+    for zone, unlock in zip(npc_zones, all_unlocks):
+        # Glass shrines can't be placed on a zone's first floor.
+        candidates = [level for level in levels if unlock != "Glass" or level != 1]
+        taken = used_levels.setdefault(zone, set())
+        free = [level for level in candidates if level not in taken]
+        if not free:
+            taken.clear()
+            free = candidates
+        level = random.choice(free)
+        taken.add(level)
         adjusted_levels.append(level)
 
     return {

@@ -39,6 +39,10 @@ _DIAMOND_VALUES: dict[str, int] = {
     "APDiamond4": 4,
 }
 
+# Item types the mod must re-apply itself after missing them,
+# because nothing in the derived state carries their effect
+_REPLAYABLE_ITEM_TYPES: frozenset[ItemType] = frozenset({ItemType.FILLER, ItemType.TRAP})
+
 _CODEX_MAP: dict[str, str] = {
     "Dragon Lore": "DragonLore",
     "Trap Lore": "TrapLore",
@@ -97,7 +101,13 @@ class CotNDSaveData:
             "Murder": None,
         }
         self.unlocked_npcs: dict = {}
+        # Record of what the mod has actually parsed, not a mirror of ctx.items_received
         self.received_items: dict = {}
+        # False until a persisted parsed-record has been adopted
+        self._received_items_known: bool = False
+        # True when restored from a valid existing save, as opposed to a brand
+        # new game. Distinguishes "upgraded mid-playthrough" from "nothing yet".
+        self._had_prior_save: bool = False
         self.shop_consumed_locations: dict = {}
         self.health: int = 0
         self.shop_stock: int = 0
@@ -134,6 +144,8 @@ class CotNDSaveData:
         if raw.get("seedName") != ctx.seed_name:
             return inst
 
+        inst._had_prior_save = True
+
         raw_diamonds = raw.get("diamonds")
         if isinstance(raw_diamonds, (int, float)):
             inst.diamonds = int(raw_diamonds)
@@ -153,6 +165,11 @@ class CotNDSaveData:
         hints_purchased = raw.get("hintsPurchased")
         if isinstance(hints_purchased, int):
             inst.hints_purchased = hints_purchased
+
+        parsed = raw.get("receivedItems")
+        if isinstance(parsed, dict):
+            inst.received_items = parsed
+            inst._received_items_known = True
 
         return inst
 
@@ -177,6 +194,7 @@ class CotNDSaveData:
             "bannedItems": self.banned_items,
             "nextRunItems": self.next_run_items,
             "hintsPurchased": self.hints_purchased,
+            "receivedItems": self.received_items,
         }
 
     # ------------------------------------------------------------------ #
@@ -199,7 +217,7 @@ class CotNDSaveData:
             "shop_locations": self.shop_locations,
             "codex_locations": self.codex_locations,
             "unlocked_npcs": self.unlocked_npcs,
-            "received_items": self.received_items,
+            "received_items": self.received_items_for_state(),
             "shop_consumed_locations": self.shop_consumed_locations,
             "health": self.health,
             "shop_stock": self.shop_stock,
@@ -229,7 +247,6 @@ class CotNDSaveData:
         self.unlocked_npcs = self._compute_unlocked_npcs()
         self.shop_locations = self._compute_shop_locations()
         self.codex_locations = self._compute_codex_locations()
-        self.received_items = self._compute_received_items()
         self.shop_consumed_locations = self._compute_shop_consumed()
         (
             self.health,
@@ -265,7 +282,7 @@ class CotNDSaveData:
             z = zone_map.get(cotnd_id)
             if z is not None:
                 access[str(z)] = True
-            elif cotnd_id == "APProgressiveZoneAccess":
+            elif cotnd_id == "APProgressiveZoneAccess" and net_item.location != -2:
                 progressive_count += 1
 
         if zone_access_keys == 2:  # progressive mode (ZoneAccessKeys.option_progressive)
@@ -461,6 +478,47 @@ class CotNDSaveData:
 
         return codex_locations
 
+    def mark_items_parsed(self) -> None:
+        """Record every AP item as parsed, once the mod has been sent them."""
+        self.received_items = self._compute_received_items()
+        self._received_items_known = True
+
+    def ensure_received_items_initialized(self) -> None:
+        """Seed the parsed record on the first load that lacks one.
+        """
+        if self._received_items_known:
+            return
+        if self._had_prior_save:
+            self.mark_items_parsed()
+        else:
+            self._received_items_known = True
+
+    def _replayable_keys(self) -> set[str]:
+        """ap_index keys whose effect the mod alone can apply."""
+        diamonds_replayable = self.diamonds is not None
+        keys: set[str] = set()
+        for idx, net_item in enumerate(self._ctx.items_received):
+            try:
+                item_data = item_from_code(net_item.item)
+            except (KeyError, ValueError):
+                continue
+            if item_data.type not in _REPLAYABLE_ITEM_TYPES:
+                continue
+            if not diamonds_replayable and item_data.cotnd_id in _DIAMOND_VALUES:
+                continue
+            keys.add(str(idx))
+        return keys
+
+    def received_items_for_state(self) -> dict:
+        """Parsed record padded with everything the mod must not re-apply.
+        """
+        replayable = self._replayable_keys()
+        return {
+            key: entry
+            for key, entry in self._compute_received_items().items()
+            if key not in replayable or key in self.received_items
+        }
+
     def _compute_received_items(self) -> dict:
         ctx = self._ctx
         result: dict = {}
@@ -534,8 +592,12 @@ class CotNDSaveData:
         for net_item in ctx.items_received:
             try:
                 item_data = item_from_code(net_item.item)
-                if item_data.type == ItemType.MODE and item_data.cotnd_id in extra_modes:
-                    extra_modes[item_data.cotnd_id] = True
+                if item_data.type != ItemType.MODE:
+                    continue
+                # Keys are option display names ("No Return"), not cotnd_ids.
+                mode = item_data.name.removesuffix(" Mode")
+                if mode in extra_modes:
+                    extra_modes[mode] = True
             except (KeyError, ValueError):
                 pass
         return extra_modes

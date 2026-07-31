@@ -277,11 +277,14 @@ class CotNDContext(CommonContext):
         # Recompute all AP-derived save fields (health, zone access, diamonds, etc.).
         self.ap_savedata.refresh()
 
-        if indexed_items:
+        if indexed_items and self.cotnd_server.cotnd_connected:
             asyncio.create_task(self.cotnd_server.send_packet({
                 "datatype": "Items",
                 "items": indexed_items,
             }))
+            # Only count as parsed when the mod was actually there to receive them;
+            # otherwise they stay in the delta and replay on the next connect.
+            self.ap_savedata.mark_items_parsed()
         if trap_items:
             asyncio.create_task(self.send_trap_links(trap_items))
 
@@ -327,6 +330,7 @@ class CotNDContext(CommonContext):
             return
         # Restore non-derivable state; derivable state is recomputed in _send_state.
         self.ap_savedata = CotNDSaveData.from_datastorage(keys_dict[save_key], self)
+        self.ap_savedata.ensure_received_items_initialized()
         if self._pending_state_data is not None:
             pending = self._pending_state_data
             self._pending_state_data = None
@@ -372,12 +376,34 @@ class CotNDContext(CommonContext):
         }))
         asyncio.create_task(self._persist_and_push())
 
+    def _forward_item_send(self, args: dict):
+        """Announce items this slot found for someone else.
+        """
+        item = args.get("item")
+        receiving = args.get("receiving")
+        if item is None or receiving is None:
+            return
+        if not self.slot_concerns_self(item.player) or self.slot_concerns_self(receiving):
+            return
+        asyncio.create_task(self.cotnd_server.send_packet({
+            "datatype": "Chat",
+            "msg": (
+                f"Sent {self.item_names.lookup_in_slot(item.item, receiving)} "
+                f"to {self.player_names[receiving]}"
+            ),
+            "player": "Archipelago",
+            "slot": None,
+        }))
+
     def _on_print_json(self, args: dict):
         FORWARD_TYPES = {
             "Chat", "ServerChat", "CommandResult", "AdminCommandResult",
             "Tutorial", "Countdown",
         }
         msg_type = args.get("type")
+        if msg_type == "ItemSend":
+            self._forward_item_send(args)
+            return
         if msg_type not in FORWARD_TYPES:
             return
         message = self.rawjsontotextparser(copy.deepcopy(args["data"]))
@@ -635,6 +661,8 @@ class CotNDContext(CommonContext):
             }])
 
         await self.cotnd_server.send_packet(state_packet)
+
+        self.ap_savedata.mark_items_parsed()
 
         # Persist on init so DataStorage immediately reflects the full snapshot.
         if is_init:

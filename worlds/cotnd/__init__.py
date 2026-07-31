@@ -375,6 +375,22 @@ class CotNDWorld(World):
 
         return fill
 
+    def interpret_slot_data(self, slot_data: Mapping[str, Any]) -> None:
+        """Restore generation randomness Universal Tracker cannot reproduce.
+
+        Caged NPC placement and the starting-character fallback come from
+        self.random, so we need to specify the selected character/caged_npcs here.
+        """
+        caged_npcs = slot_data.get("caged_npc_locations")
+        if caged_npcs:
+            self.caged_npc_locations = dict(caged_npcs)
+
+        starting_character = slot_data.get("starting_character")
+        if starting_character:
+            self.starting_character_name = starting_character
+
+        set_rules(self)
+
     @classmethod
     def stage_write_spoiler(cls, multiworld: MultiWorld, spoiler_handle):
         cotnd_players = multiworld.get_game_players(cls.game)
