@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 # Module-level constants / compiled patterns
 # ---------------------------------------------------------------------------
 
-_SAVE_VERSION = 1  # Bump when the DataStorage schema changes incompatibly.
+_SAVE_VERSION = 2  # Bump when the DataStorage schema changes incompatibly.
 
 _DIAMOND_VALUES: dict[str, int] = {
     "APDiamond1": 1,
