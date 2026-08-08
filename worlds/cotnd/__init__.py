@@ -133,6 +133,7 @@ class CotNDWorld(World):
                 included_modes,
                 bool(self.options.include_unique_items),
                 self.options.character_unlocks.current_key,
+                bool(self.options.include_shrine_checks.value),
             )
         )
         self.items = filter_population_list(self.world_item_list)
@@ -182,6 +183,7 @@ class CotNDWorld(World):
             bool(self.options.include_codex_checks.value),
             bool(self.options.floor_clear_checks.value),
             self.options.victory_trigger.current_key,
+            bool(self.options.include_shrine_checks.value),
         )
 
         # NOW remove the precollected zone keys from the pool (after location generation)
@@ -335,6 +337,7 @@ class CotNDWorld(World):
         fill = self.options.as_dict(
             "death_link",
             "death_link_type",
+            "death_link_trigger",
             "dlc",
             "goal",
             "floor_clear_checks",
@@ -345,17 +348,11 @@ class CotNDWorld(World):
             "zones_goal_clear",
             "included_extra_modes",
             "price_randomization",
-            "randomized_price_min",
-            "randomized_price_max",
-            "filler_price_min",
-            "filler_price_max",
-            "useful_price_min",
-            "useful_price_max",
-            "progression_price_min",
-            "progression_price_max",
+            "price_ranges",
             "zone_access_keys",
             "lock_character_room",
             "include_materials",
+            "include_shrine_checks",
             "trap_weights",
             "trap_link",
             "traplink_excluded_traps",
@@ -363,6 +360,7 @@ class CotNDWorld(World):
             "golden_lute_shards_goal_clear",
             "victory_trigger",
             "expensive_purchase_price",
+            "diamond_exchange_rate",
         )
 
         # fill["item_by_code"] = self.item_from_code

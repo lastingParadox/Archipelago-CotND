@@ -36,6 +36,7 @@ class LocationType(Enum):
     ALL_ZONES_EVENT = auto()
     ZONES_EVENT = auto()
     VICTORY_EVENT = auto()
+    SHRINE = auto()
 
 
 PLURALS: dict[LocationType, str] = {
@@ -197,6 +198,33 @@ def generate_event_locations(characters: list[CotNDItemData]):
     return all_zones + zones + victory
 
 
+
+NON_AMPLIFIED_SHRINES: frozenset[str] = frozenset({
+    "Shrine of No Return",
+    "Shrine of Phasing",
+    "Shrine of Pace",
+})
+
+
+def generate_shrine_locations():
+    base = [
+        "Shrine of War", "Shrine of Blood", "Shrine of Darkness", "Shrine of Glass",
+        "Shrine of Peace", "Shrine of Rhythm", "Shrine of Risk", "Shrine of Sacrifice",
+        "Shrine of Space", "Shrine of Chance",
+        "Shrine of No Return", "Shrine of Phasing", "Shrine of Pace",
+    ]
+    amplified = ["Boss Shrine", "Shrine of Pain", "Shrine of Uncertainty"]
+    synchrony = ["Shrine of the Feast", "Shrine of Fire"]
+
+    locs = [RawCotNDLocationData(name, LocationType.SHRINE, None, frozenset(), None) for name in base]
+    locs += [RawCotNDLocationData(name, LocationType.SHRINE, None, frozenset({DLC.AMPLIFIED}), None)
+             for name in amplified]
+    locs += [RawCotNDLocationData(name, LocationType.SHRINE, None, frozenset({DLC.SYNCHRONY}), None)
+             for name in synchrony]
+
+    return locs
+
+
 def load_all_locations():
     characters = get_available_characters(None, {"Synchrony", "Amplified", "Miku", "Shovel Knight"})
 
@@ -206,8 +234,9 @@ def load_all_locations():
     zone_locs = generate_zone_clear_locations(characters)
     extra_mode_locs = generate_extra_mode_locations()
     event_locs = generate_event_locations(characters)
+    shrine_locs = generate_shrine_locations()
 
-    all_locs = shop_locs + npc_locations + codex_locs + zone_locs + extra_mode_locs + event_locs
+    all_locs = shop_locs + npc_locations + codex_locs + zone_locs + extra_mode_locs + event_locs + shrine_locs
     loaded: list[CotNDLocationData] = []
     seen_names: Set[str] = set()
 
@@ -262,7 +291,8 @@ VICTORY_TRIGGER_LOCATIONS: dict[str, str] = {
 
 
 def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_blacklist: Set[str], goal: int,
-                       extra_modes: Set[str], codex_checks: bool, per_level: bool, victory_trigger: str = "Ensemble"):
+                       extra_modes: Set[str], codex_checks: bool, per_level: bool, victory_trigger: str = "Ensemble",
+                       shrine_checks: bool = True):
     dlc_enums = normalize_dlc(dlc)
     location_list = []
 
@@ -293,6 +323,14 @@ def get_locations_list(item_list: list[CotNDItemData], dlc: Set[str], character_
         # Remove per-level checks
         elif location.type is LocationType.FLOOR or location.type is LocationType.BOSS:
             continue
+
+        # Shrines
+        if location.type is LocationType.SHRINE:
+            if not shrine_checks:
+                continue
+            # Amplified replaces these shrines, so they cannot be activated.
+            if location.name in NON_AMPLIFIED_SHRINES and DLC.AMPLIFIED in dlc_enums:
+                continue
 
         # Remove checks not in extra_modes
         if location.type is LocationType.EXTRA_MODE:

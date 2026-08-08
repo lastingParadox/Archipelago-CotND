@@ -129,6 +129,9 @@ def set_rules(world: CotNDWorld) -> None:
         elif location.type is LocationType.TUTORIAL:
             rule = Has("Codex")
 
+        elif location.type is LocationType.SHRINE:
+            rule = Has(location.name)
+
         # Zone access
         if location.type in all_zones_types:
             zone_rule: Rule[CotNDWorld] = FullZoneAccess()

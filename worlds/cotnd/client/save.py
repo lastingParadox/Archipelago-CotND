@@ -89,6 +89,10 @@ class CotNDSaveData:
         self.next_run_items: dict = {}
         # Incremented each time the player successfully purchases a hint.
         self.hints_purchased: int = 0
+        # Shrine toggles. None until seeded from slot data on the first connect;
+        # after that the player's choice outlives the YAML.
+        self.death_link: bool | None = None
+        self.trap_link: bool | None = None
 
         # --- Derivable (computed by refresh()) ---
         self.zone_access: dict = {"progressiveCount": 0}
@@ -171,6 +175,14 @@ class CotNDSaveData:
             inst.received_items = parsed
             inst._received_items_known = True
 
+        death_link = raw.get("deathLink")
+        if isinstance(death_link, bool):
+            inst.death_link = death_link
+
+        trap_link = raw.get("trapLink")
+        if isinstance(trap_link, bool):
+            inst.trap_link = trap_link
+
         return inst
 
     # ------------------------------------------------------------------ #
@@ -195,6 +207,8 @@ class CotNDSaveData:
             "nextRunItems": self.next_run_items,
             "hintsPurchased": self.hints_purchased,
             "receivedItems": self.received_items,
+            "deathLink": self.death_link,
+            "trapLink": self.trap_link,
         }
 
     # ------------------------------------------------------------------ #

@@ -141,9 +141,18 @@ class IncludedExtraModes(OptionList):
 
 
 class IncludeCodexChecks(DefaultOnToggle):
-    """Determines whether Tutorial levels (Bomb Lore, How to Get Away with Murder, etc.) will be included in progression.Default is true."""
+    """Determines whether Tutorial levels (Bomb Lore, How to Get Away with Murder, etc.) will be included in progression. Default is true."""
 
     display_name = "Include Codex Checks"
+
+
+class IncludeShrineChecks(Toggle):
+    """Determines whether shrines are randomized. Each shrine becomes an item, and activating one for the first time is a check.
+    A shrine only generates in runs once its item has been received. Default is false.
+    Note: Shrines belonging to a DLC you have not enabled are excluded, as are the shrines Amplified replaces (No Return, Phasing, Pace) when Amplified is enabled.
+    """
+
+    display_name = "Include Shrine Checks"
 
 
 class LobbyNPCItems(Toggle):
@@ -164,17 +173,17 @@ class IncludeMaterials(Toggle):
 class StartingInventory(NamedRange):
     """Percentage of starting items granted at world start.
     If Character Unlocks is not Item_Only, required items for the starting character are always included.
-    Default is 33.
+    Default is 25.
 
     Presets:
     Vanilla (100): All starting items, like a fresh save.
     Half (50): Half of all starting items.
-    Reduced (33): A third of all starting items.
+    Reduced (25): A quarter of all starting items.
     Minimum (0): Only mandatory items (Dagger, Apple, Shovel)."""
 
     range_start = 0
     range_end = 100
-    special_range_names = {"vanilla": 100, "half": 50, "reduced": 33, "minimum": 0}
+    special_range_names = {"vanilla": 100, "half": 50, "reduced": 25, "minimum": 0}
     default = special_range_names["reduced"]
 
 
@@ -398,76 +407,67 @@ class PriceRandomization(Choice):
     default = option_Vanilla
 
 
-class RandomizedPriceMin(Range):
-    """Determines the minimum diamond price range for items in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla_Rand or Complete."""
-
-    display_name = "Randomized Price Minimum"
-    range_start = 1
-    range_end = 100
-    default = 1
-
-
-class RandomizedPriceMax(Range):
-    """Determines the maximum diamond price range for items in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla_Rand or Complete."""
-
-    display_name = "Randomized Price Maximum"
-    range_start = 1
-    range_end = 100
-    default = 10
+_default_price_ranges = {
+    "random_min": 1,
+    "random_max": 10,
+    "filler_min": 1,
+    "filler_max": 4,
+    "useful_min": 2,
+    "useful_max": 8,
+    "progression_min": 4,
+    "progression_max": 10,
+}
 
 
-class FillerPriceMin(Range):
-    """Determines the minimum diamond price range for a Filler item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
+class PriceRanges(OptionCounter):
+    """
+    Diamond price ranges for items in the Archipelago lobby, in diamonds.
+    random_min / random_max apply when Price Randomization is Vanilla_Rand or Complete.
+    The filler, useful and progression pairs apply when it is Vanilla or Item_Class.
+    A minimum above its matching maximum is swapped during generation.
+    """
 
-    display_name = "Filler Item Price Minimum"
-    range_start = 1
-    range_end = 100
-    default = 1
+    display_name = "Price Ranges"
+    valid_keys = _default_price_ranges.keys()
 
+    min = 1
+    max = 100
 
-class FillerPriceMax(Range):
-    """Determines the maximum diamond price range for a Filler item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
+    default = _default_price_ranges
 
-    display_name = "Filler Item Price Maximum"
-    range_start = 1
-    range_end = 100
-    default = 4
+class DiamondExchangeRate(NamedRange):
+    """How much gold converts into one AP diamond when you win a run.
+    A run's leftover gold is otherwise discarded, so this cashes it out. Only winning runs convert; dying forfeits the gold.
+    In co-op and online multiplayer every player's gold is pooled before converting.
+    Default is 100.
 
+    Presets:
+    Disabled (0): Leftover gold is discarded.
+    Shrine_Rate (50): Matches the Shrine of Exchange 50:1.
+    Default (100): Twice the Shrine of Exchange rate. 100:1.
+    Stingy (150): Thrice the Shrine of Exchange rate. 150:1.
+    """
 
-class UsefulPriceMin(Range):
-    """Determines the minimum diamond price range for a Useful item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
-
-    display_name = "Useful Item Price Minimum"
-    range_start = 1
-    range_end = 100
-    default = 2
-
-
-class UsefulPriceMax(Range):
-    """Determines the maximum diamond price range for a Useful item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
-
-    display_name = "Useful Item Price Maximum"
-    range_start = 1
-    range_end = 100
-    default = 8
-
-
-class ProgressionPriceMin(Range):
-    """Determines the minimum diamond price range for a Progression item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
-
-    display_name = "Progression Item Price Minimum"
-    range_start = 1
-    range_end = 100
-    default = 4
+    display_name = "Diamond Exchange Rate"
+    range_start = 0
+    range_end = 1000
+    special_range_names = {"disabled": 0, "shrine_rate": 50, "default": 100, "stingy": 150}
+    default = 50
 
 
-class ProgressionPriceMax(Range):
-    """Determines the maximum diamond price range for a Progression item in the AP Lobby. This option will only be applied if either Price Randomization is set to Vanilla or Item_Class."""
+# Multiplayer Options
+class DeathLinkTrigger(Choice):
+    """With more than one player in a run, what counts as a death worth sending a DeathLink for. Default is Game Over.
+    Game_Over: A DeathLink is sent only when a death leaves no players standing, ending the run.
+    Each_Death: A DeathLink is sent every time any player dies, even if the run continues.
+    Note: This applies to both online multiplayer and local co-op. In singleplayer both settings behave identically, since any death ends the run.
+    """
 
-    display_name = "Progression Item Price Maximum"
-    range_start = 1
-    range_end = 100
-    default = 10
+    display_name = "DeathLink Trigger"
+    option_Game_Over = 0
+    option_Each_Death = 1
+    default = option_Game_Over
+
 
 
 @dataclass
@@ -481,6 +481,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     floor_clear_checks: FloorClearChecks
     dlc: DLC
     death_link_type: DeathLinkType
+    death_link_trigger: DeathLinkTrigger
     starting_inventory: StartingInventory
     starting_character: StartingCharacter
     character_blacklist: CharacterBlacklist
@@ -489,6 +490,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     include_materials: IncludeMaterials
     included_extra_modes: IncludedExtraModes
     include_codex_checks: IncludeCodexChecks
+    include_shrine_checks: IncludeShrineChecks
     lobby_npc_items: LobbyNPCItems
     zone_access_keys: ZoneAccessKeys
     starting_zone: StartingZone
@@ -499,14 +501,8 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     trap_link: TrapLink
     traplink_excluded_traps: TrapLinkExcludedTraps
     price_randomization: PriceRandomization
-    randomized_price_min: RandomizedPriceMin
-    randomized_price_max: RandomizedPriceMax
-    filler_price_min: FillerPriceMin
-    filler_price_max: FillerPriceMax
-    useful_price_min: UsefulPriceMin
-    useful_price_max: UsefulPriceMax
-    progression_price_min: ProgressionPriceMin
-    progression_price_max: ProgressionPriceMax
+    price_ranges: PriceRanges
+    diamond_exchange_rate: DiamondExchangeRate
 
 
 option_groups = [
@@ -528,6 +524,7 @@ option_groups = [
             DLC,
             IncludedExtraModes,
             IncludeCodexChecks,
+            IncludeShrineChecks,
             LobbyNPCItems,
             IncludeMaterials,
         ],
@@ -558,17 +555,17 @@ option_groups = [
     ),
     OptionGroup("Trap Options", [TrapPercentage, TrapWeights]),
     OptionGroup(
+        "Multiplayer Options",
+        [
+            DeathLinkTrigger,
+        ],
+    ),
+    OptionGroup(
         "Pricing Options",
         [
             PriceRandomization,
-            RandomizedPriceMin,
-            RandomizedPriceMax,
-            FillerPriceMin,
-            FillerPriceMax,
-            UsefulPriceMin,
-            UsefulPriceMax,
-            ProgressionPriceMin,
-            ProgressionPriceMax,
+            PriceRanges,
+            DiamondExchangeRate,
         ],
     ),
 ]

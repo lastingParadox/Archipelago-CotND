@@ -53,8 +53,22 @@ def cap_option(options, option_name: str, cap: int):
 
 
 def validate_price_ranges(options):
-    for prefix in ("randomized", "filler", "useful", "progression"):
-        ensure_min_max(options, f"{prefix}_price_min", f"{prefix}_price_max")
+    ranges = options.price_ranges.value
+    defaults = type(options.price_ranges).default
+
+    for prefix in ("random", "filler", "useful", "progression"):
+        min_key, max_key = f"{prefix}_min", f"{prefix}_max"
+        # Keys are optional in the YAML; anything omitted falls back to default.
+        min_val = ranges.get(min_key, defaults[min_key])
+        max_val = ranges.get(max_key, defaults[max_key])
+
+        if max_val < min_val:
+            print(
+                f"[WARNING] Swapping {min_key} ({min_val}) and {max_key} ({max_val}) to maintain proper bounds."
+            )
+            min_val, max_val = max_val, min_val
+
+        ranges[min_key], ranges[max_key] = min_val, max_val
 
 
 def validate_starting_zone(options, dlcs):

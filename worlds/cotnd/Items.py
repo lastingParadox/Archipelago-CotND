@@ -35,6 +35,7 @@ class ItemType(Enum):
     NPC = auto()
     TRAP = auto()
     BUFF = auto()
+    SHRINE = auto()
 
 
 PLURALS: dict[ItemType, str] = {
@@ -56,6 +57,7 @@ PLURALS: dict[ItemType, str] = {
     ItemType.MODE: "Modes",
     ItemType.NPC: "NPCs",
     ItemType.BUFF: "Buffs",
+    ItemType.SHRINE: "Shrines",
 }
 
 
@@ -645,6 +647,57 @@ buffs: list[RawCotNDItemData] = [
     RawCotNDItemData("Shovel Knight Buff", ItemClassification.useful, ItemType.BUFF, "APShovelKnightBuff", DLC.SHOVEL_KNIGHT, DefaultType.NEVER),
 ]
 
+
+# Amplified replaces these shrines outright (AmplifiedTweaks removes the entities),
+# so they only exist in a world where Amplified is not enabled.
+NON_AMPLIFIED_ONLY: frozenset[str] = frozenset({
+    "Ring of Phasing",
+    "Shrine of No Return",
+    "Shrine of Phasing",
+    "Shrine of Pace",
+})
+
+shrines: list[RawCotNDItemData] = [
+    RawCotNDItemData("Shrine of War", ItemClassification.useful, ItemType.SHRINE, "ShrineOfWar", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Blood", ItemClassification.useful, ItemType.SHRINE, "ShrineOfBlood", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Darkness", ItemClassification.useful, ItemType.SHRINE, "ShrineOfDarkness", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Glass", ItemClassification.useful, ItemType.SHRINE, "ShrineOfGlass", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Peace", ItemClassification.useful, ItemType.SHRINE, "ShrineOfPeace", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Rhythm", ItemClassification.useful, ItemType.SHRINE, "ShrineOfRhythm", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Risk", ItemClassification.useful, ItemType.SHRINE, "ShrineOfRisk", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Sacrifice", ItemClassification.useful, ItemType.SHRINE, "ShrineOfSacrifice", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Space", ItemClassification.useful, ItemType.SHRINE, "ShrineOfSpace", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Chance", ItemClassification.useful, ItemType.SHRINE, "ShrineOfChance", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    # Non-Amplified only, see NON_AMPLIFIED_ONLY above.
+    RawCotNDItemData("Shrine of No Return", ItemClassification.useful, ItemType.SHRINE, "ShrineOfNoReturn", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Phasing", ItemClassification.useful, ItemType.SHRINE, "ShrineOfPhasing", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Pace", ItemClassification.useful, ItemType.SHRINE, "ShrineOfPace", DLC.BASE,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Boss Shrine", ItemClassification.useful, ItemType.SHRINE, "ShrineOfBoss", DLC.AMPLIFIED,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Pain", ItemClassification.useful, ItemType.SHRINE, "ShrineOfPain", DLC.AMPLIFIED,
+                     DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Uncertainty", ItemClassification.useful, ItemType.SHRINE, "ShrineOfUncertainty",
+                     DLC.AMPLIFIED, DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of the Feast", ItemClassification.useful, ItemType.SHRINE, "Sync_ShrineOfFeast",
+                     DLC.SYNCHRONY, DefaultType.POSSIBLE),
+    RawCotNDItemData("Shrine of Fire", ItemClassification.useful, ItemType.SHRINE, "Sync_ShrineOfFire",
+                     DLC.SYNCHRONY, DefaultType.POSSIBLE),
+]
+
+
 ITEM_SOURCES: tuple[list[RawCotNDItemData], ...] = (
     characters,
     armors,
@@ -666,6 +719,7 @@ ITEM_SOURCES: tuple[list[RawCotNDItemData], ...] = (
     filler,
     traps,
     buffs,
+    shrines,
 )
 
 BASE_ITEM_CODE: Final = 247_080
@@ -730,7 +784,8 @@ def build_master_world_items(
         dlc: Optional[Set[str]] = None,
         game_modes: Optional[Set[str]] = None,
         include_unique_items: bool = False,
-        character_unlocks: str = "item_only"
+        character_unlocks: str = "item_only",
+        include_shrines: bool = True,
 ) -> Tuple[list[CotNDItemData], dict[str, CotNDItemData], dict[int, CotNDItemData]]:
     if character_blacklist is None:
         character_blacklist = set()
@@ -744,8 +799,11 @@ def build_master_world_items(
     items_list = [copy(item) for item in ALL_ITEMS]
 
     for item in items_list:
-        # Amplified phasing rule
-        if item.name == "Ring of Phasing" and DLC.AMPLIFIED in dlc_enums:
+        # Amplified replaces these outright; they do not exist alongside it.
+        if item.name in NON_AMPLIFIED_ONLY and DLC.AMPLIFIED in dlc_enums:
+            continue
+
+        if item.type is ItemType.SHRINE and not include_shrines:
             continue
 
         # Character blacklist

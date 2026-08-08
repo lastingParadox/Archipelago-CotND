@@ -137,6 +137,11 @@ class CotNDContext(CommonContext):
     # Tag management                                                       #
     # ------------------------------------------------------------------ #
 
+    async def update_death_link(self, death_link: bool):
+        await super().update_death_link(death_link)
+        self.ap_savedata.death_link = death_link
+        await self._persist_save()
+
     async def update_trap_link(self, trap_link: bool):
         old_tags = self.tags.copy()
         if trap_link:
@@ -145,6 +150,8 @@ class CotNDContext(CommonContext):
             self.tags -= {"TrapLink"}
         if old_tags != self.tags and self.server and not self.server.socket.closed:
             await self.send_msgs([{"cmd": "ConnectUpdate", "tags": self.tags}])
+        self.ap_savedata.trap_link = trap_link
+        await self._persist_save()
 
     # ------------------------------------------------------------------ #
     # Connection lifecycle                                                 #
@@ -212,9 +219,6 @@ class CotNDContext(CommonContext):
             "cmd": "Get",
             "keys": [f"cotnd_{self.slot}_save"],
         }]))
-        asyncio.create_task(self.update_death_link(bool(self.slotdata.get("death_link", False))))
-        if self.slotdata.get("trap_link", False):
-            self.tags.add("TrapLink")
         asyncio.create_task(self.cotnd_server.start(), name="CotNDServer")
 
     def log_goal_progress(self) -> None:
@@ -331,6 +335,14 @@ class CotNDContext(CommonContext):
         # Restore non-derivable state; derivable state is recomputed in _send_state.
         self.ap_savedata = CotNDSaveData.from_datastorage(keys_dict[save_key], self)
         self.ap_savedata.ensure_received_items_initialized()
+
+        if self.ap_savedata.death_link is None:
+            self.ap_savedata.death_link = bool(self.slotdata.get("death_link", False))
+        if self.ap_savedata.trap_link is None:
+            self.ap_savedata.trap_link = bool(self.slotdata.get("trap_link", False))
+        asyncio.create_task(self.update_death_link(self.ap_savedata.death_link))
+        asyncio.create_task(self.update_trap_link(self.ap_savedata.trap_link))
+
         if self._pending_state_data is not None:
             pending = self._pending_state_data
             self._pending_state_data = None
@@ -694,39 +706,53 @@ class CotNDContext(CommonContext):
             "goal": goal_str,
             "goal_required": goal_required,
             "death_link_type": death_link_type_str,
+            "death_link_trigger": "Each Death" if sd.get("death_link_trigger") == 1 else "Game Over",
             "per_level_checks": sd.get("floor_clear_checks", 0) != 0,
             "included_extra_modes": sd.get("included_extra_modes"),
             "dlc": sd.get("dlc"),
             "character_blacklist": sd.get("character_blacklist"),
             "character_unlocks": sd.get("character_unlocks"),
             "include_unique_items": sd.get("include_unique_items"),
+            "include_materials": sd.get("include_materials", 0),
+            "include_shrine_checks": sd.get("include_shrine_checks", 1),
             "zone_access_keys": sd.get("zone_access_keys"),
             "starting_zone": sd.get("starting_zone"),
             "lock_character_room": sd.get("lock_character_room"),
             "buff_items": sd.get("buff_items"),
             "victory_trigger": sd.get("victory_trigger"),
             "expensive_purchase_price": sd.get("expensive_purchase_price"),
+            "diamond_exchange_rate": sd.get("diamond_exchange_rate", 100),
             "caged_npc_locations": sd.get("caged_npc_locations"),
             "npc_hint_locations": sd.get("npc_hint_locations"),
-            "pricing": {
-                "type": sd.get("price_randomization"),
-                "general_price_range": {
-                    "min": sd.get("randomized_price_min"),
-                    "max": sd.get("randomized_price_max"),
-                },
-                "filler_price_range": {
-                    "min": sd.get("filler_price_min"),
-                    "max": sd.get("filler_price_max"),
-                },
-                "useful_price_range": {
-                    "min": sd.get("useful_price_min"),
-                    "max": sd.get("useful_price_max"),
-                },
-                "progression_price_range": {
-                    "min": sd.get("progression_price_min"),
-                    "max": sd.get("progression_price_max"),
-                },
-            },
+            "pricing": self._build_pricing(),
+        }
+
+    def _build_pricing(self) -> dict:
+        """Expand the price_ranges option into the shape the mod expects.
+
+        The packet keeps its original nested form so consolidating the options
+        stayed an apworld-side change.
+        """
+        ranges = self.slotdata.get("price_ranges") or {}
+        defaults = {
+            "random_min": 1, "random_max": 10,
+            "filler_min": 1, "filler_max": 4,
+            "useful_min": 2, "useful_max": 8,
+            "progression_min": 4, "progression_max": 10,
+        }
+
+        def pair(prefix: str) -> dict:
+            return {
+                "min": ranges.get(f"{prefix}_min", defaults[f"{prefix}_min"]),
+                "max": ranges.get(f"{prefix}_max", defaults[f"{prefix}_max"]),
+            }
+
+        return {
+            "type": self.slotdata.get("price_randomization"),
+            "general_price_range": pair("random"),
+            "filler_price_range": pair("filler"),
+            "useful_price_range": pair("useful"),
+            "progression_price_range": pair("progression"),
         }
 
     # ------------------------------------------------------------------ #
