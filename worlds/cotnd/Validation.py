@@ -1,149 +1,141 @@
-from typing import List
+from __future__ import annotations
 
-from .Characters import get_available_characters
-from .Items import get_starting_pool, CotNDItemData, ItemType, DefaultType
-from .Utils import character_requirements
+from typing import TYPE_CHECKING
 
+from worlds.cotnd.Items import ALL_ITEMS, CotNDItemData, ItemType, max_zone, owned_dlc
+from worlds.cotnd.Options import CotNDOptions, DeathLinkType
+from worlds.cotnd.Utils import DLC, warn
 
-def ensure_min_max(options, min_name: str, max_name: str) -> None:
-    min_val = getattr(options, min_name).value
-    max_val = getattr(options, max_name).value
+if TYPE_CHECKING:
+    from . import CotNDWorld
 
-    if max_val < min_val:
-        print(
-            f"[WARNING] Swapping {min_name} ({min_val}) and {max_name} ({max_val}) to maintain proper bounds."
-        )
-        setattr(options, min_name, type(getattr(options, min_name))(max_val))
-        setattr(options, max_name, type(getattr(options, max_name))(min_val))
+MIN_SPEEDRUN_MINUTES = 3
 
+STORY_CHARACTERS = {"Cadence", "Melody", "Aria"}
+STORY_CHARACTERS_AMPLIFIED = {"Nocturna"}
 
-def validate_blacklist(options, dlcs) -> set[str]:
-    blacklist = set(options.character_blacklist.value)
-    all_chars = get_available_characters(blacklist, dlcs)
-    if len(all_chars) == 0:
-        print("[WARNING] Removing Cadence from the blacklist to maintain progression.")
-        blacklist.discard("Cadence")
-        options.character_blacklist.value = list(blacklist)
-    return blacklist
+AMPLIFIED_MODES = {"No Return", "Hard", "Phasing", "Randomizer", "Mystery"}
 
+PRICE_RANGE_PREFIXES = ("random", "filler", "useful", "progression")
 
-def validate_modes(options, dlcs) -> set[str]:
-    included_modes = set(options.included_extra_modes.value)
+# Options validation
 
-    if "amplified" not in dlcs:
-        amplified_modes = {"No Return", "Hard", "Phasing", "Randomizer", "Mystery"}
-        removed = included_modes & amplified_modes
-        included_modes -= amplified_modes
-        if removed:
-            print(
-                f"[WARNING] Removed Amplified-only modes (no Amplified DLC enabled): {', '.join(sorted(removed))}"
-            )
-        options.included_extra_modes.value = list(included_modes)
+def cap_option(options: CotNDOptions, name: str, cap: int) -> None:
+    option = getattr(options, name)
 
-    return included_modes
-
-
-def cap_option(options, option_name: str, cap: int):
-    option = getattr(options, option_name)
     if option.value > cap:
-        print(
-            f"[WARNING] Setting {option_name.replace('_', ' ')} to {cap} to maintain progression."
-        )
+        warn(f"Setting {name.replace('_', ' ')} to {cap} to maintain progression.")
         option.value = cap
 
+def raise_option(options: CotNDOptions, name: str, floor: int) -> None:
+    option = getattr(options, name)
 
-def validate_price_ranges(options):
+    if option.value < floor:
+        warn(f"Setting {name.replace('_', ' ')} to {floor} to maintain progression.")
+        option.value = floor
+
+def available_characters(dlc: DLC, blacklist: set[str]) -> list[CotNDItemData]:
+    # Characters that survive both the DLC filter and the blacklist.
+    return [item for item in ALL_ITEMS.items if item.type is ItemType.CHARACTER and item.available_with(dlc) and item.name not in blacklist]
+
+def validate_blacklist(options: CotNDOptions, dlc: DLC) -> set[str]:
+    blacklist = set(options.character_blacklist.value)
+
+    if options.goal == "story":
+        required = STORY_CHARACTERS | (STORY_CHARACTERS_AMPLIFIED if DLC.AMPLIFIED in dlc else set())
+
+        if blocked := blacklist & required:
+            warn(f"Removing {', '.join(sorted(blocked))} from the blacklist; the Story goal requires them.")
+            blacklist -= required
+
+    if not available_characters(dlc, blacklist):
+        warn("Removing Cadence from the blacklist to maintain progression.")
+        blacklist.discard("Cadence")
+
+    options.character_blacklist.value = blacklist
+    return blacklist
+
+def validate_modes(options: CotNDOptions, dlc: DLC) -> set[str]:
+    modes = set(options.included_extra_modes.value)
+
+    if DLC.AMPLIFIED not in dlc:
+        if removed := modes & AMPLIFIED_MODES:
+            warn(f"Removed Amplified-only modes (no Amplified DLC enabled): {', '.join(sorted(removed))}")
+
+        modes -= AMPLIFIED_MODES
+        options.included_extra_modes.value = list(modes)
+
+    return modes
+
+def validate_starting_zone(options: CotNDOptions, dlc: DLC) -> None:
+    zones = max_zone(dlc)
+
+    if options.starting_zone.value > zones:
+        warn(f"Setting starting zone to {zones} because Zone 5 requires Amplified DLC.")
+        options.starting_zone.value = zones
+
+def validate_death_link_type(options: CotNDOptions, dlc: DLC) -> None:
+    if DLC.AMPLIFIED not in dlc and options.death_link_type == "marv":
+        warn("Changing DeathLink type from Marv to Tempo because Marv requires Amplified DLC.")
+        options.death_link_type.value = DeathLinkType.option_Tempo
+
+def validate_price_ranges(options: CotNDOptions) -> None:
     ranges = options.price_ranges.value
     defaults = type(options.price_ranges).default
 
-    for prefix in ("random", "filler", "useful", "progression"):
+    for prefix in PRICE_RANGE_PREFIXES:
         min_key, max_key = f"{prefix}_min", f"{prefix}_max"
+
         # Keys are optional in the YAML; anything omitted falls back to default.
         min_val = ranges.get(min_key, defaults[min_key])
         max_val = ranges.get(max_key, defaults[max_key])
 
         if max_val < min_val:
-            print(
-                f"[WARNING] Swapping {min_key} ({min_val}) and {max_key} ({max_val}) to maintain proper bounds."
-            )
+            warn(f"Swapping {min_key} ({min_val}) and {max_key} ({max_val}) to maintain proper bounds.")
             min_val, max_val = max_val, min_val
 
         ranges[min_key], ranges[max_key] = min_val, max_val
 
+def validate_speedrun_times(options: CotNDOptions) -> None:
+    times = options.all_zones_speedrun_times.value
+    raised = sorted(char for char, minutes in times.items() if 0 < minutes < MIN_SPEEDRUN_MINUTES)
 
-def validate_starting_zone(options, dlcs):
-    if "amplified" not in dlcs and options.starting_zone.value == 5:
-        print(
-            "[WARNING] Setting starting zone to 4 because Zone 5 requires Amplified DLC."
-        )
-        options.starting_zone.value = 4
+    if raised:
+        warn(f"Raising All Zones speedrun times to {MIN_SPEEDRUN_MINUTES} minutes for "
+             f"{', '.join(raised)}; anything shorter is below reasonable clears.")
 
+        for char in raised:
+            times[char] = MIN_SPEEDRUN_MINUTES
 
-def validate_death_link_type(options, dlcs):
-    if "amplified" not in dlcs and options.death_link_type.value == 2:  # 2 is Marv
-        print(
-            "[WARNING] Changing DeathLink type from Marv to Tempo because Marv requires Amplified DLC."
-        )
-        options.death_link_type.value = 1  # 1 is Tempo
+def validate_starting_character(world: CotNDWorld, dlc: DLC, blacklist: set[str]) -> None:
+    option = world.options.starting_character
+    chosen = option.current_option_name
+    characters = sorted(character.name for character in available_characters(dlc, blacklist))
 
+    if chosen in characters:
+        return
 
-def validate_starting_character(world, character_option, items: List[CotNDItemData]):
-    characters = [item for item in items if item.type is ItemType.CHARACTER]
+    fallback = world.random.choice(characters)
+    warn(f"Setting Starting Character to {fallback} as {chosen} is not in the item pool.")
+    option.value = option.options[fallback.lower().replace(" ", "_")]
 
-    for character in characters:
-        if character.name == character_option:
-            return character
+def validate_goal_amounts(options: CotNDOptions, dlc: DLC, character_count: int) -> None:
+    # A goal cannot ask for more shards than the pool will ever hold.
+    if options.goal == "golden_lute_shards":
+        raise_option(options, "lute_shards_in_pool", options.golden_lute_shards_goal_clear.value)
 
-    # Fallback: pick a random valid character
-    new_character = world.random.choice(characters)
-    print(
-        f"[WARNING] Setting Starting Character to {new_character.name} as {character_option} is not in the item pool."
-    )
-    return new_character
+    cap_option(options, "all_zones_goal_clear", character_count)
+    cap_option(options, "zones_goal_clear", character_count * max_zone(dlc))
 
+def validate_options(world: CotNDWorld) -> None:
+    options = world.options
+    dlc = owned_dlc(world)
 
-def collect_starting_pool(world, items_list, starting_inventory, include_materials):
-    # When materials are disabled, precollect them all (unlocking all weapons from the start)
-    # and remove them from the item pool so they aren't placed in the world.
-    if not include_materials:
-        for item in items_list:
-            if item.type is ItemType.MATERIAL:
-                world.multiworld.push_precollected(world.create_item(item.name))
-        items_list = [item for item in items_list if item.type is not ItemType.MATERIAL]
-
-    starting_pool = get_starting_pool(
-        world.random, items_list, starting_inventory
-    )
-
-    # Push to collect
-    for item in starting_pool:
-        world.multiworld.push_precollected(world.create_item(item.name))
-
-    # Remove pre-collected items from item pool
-    remaining_items = items_list.copy()
-    for item in starting_pool:
-        remaining_items.remove(item)
-
-    return remaining_items
-
-
-def collect_starting_character(
-    world, items_list, starting_character, character_unlocks
-):
-    character = validate_starting_character(world, starting_character, items_list)
-
-    # Precollect the character itself
-    world.multiworld.push_precollected(world.create_item(character.name))
-
-    # Collect items to remove and precollect required items
-    items_to_remove = {character.name}  # Track names to remove
-
-    if character_unlocks != 0:
-        for requirement in character_requirements.get(character.name, set()):
-            if any(item.name == requirement for item in items_list):
-                world.multiworld.push_precollected(world.create_item(requirement))
-                items_to_remove.add(requirement)
-
-    # Return items not marked for removal, preserving duplicates by name
-    remaining_items = [item for item in items_list if item.name not in items_to_remove]
-    return remaining_items, character.name
+    blacklist = validate_blacklist(options, dlc)
+    validate_modes(options, dlc)
+    validate_death_link_type(options, dlc)
+    validate_starting_zone(options, dlc)
+    validate_starting_character(world, dlc, blacklist)
+    validate_price_ranges(options)
+    validate_speedrun_times(options)
+    validate_goal_amounts(options, dlc, len(available_characters(dlc, blacklist)))

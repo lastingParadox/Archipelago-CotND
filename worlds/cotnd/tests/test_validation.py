@@ -1,200 +1,322 @@
-"""Tests for Validation.py — option clamping, blacklist pruning, and warning fixes."""
-import unittest
+"""Tests for Validation.py — option clamping, blacklist pruning, and the fixes it warns about.
 
-from worlds.cotnd.Characters import get_available_characters
-from worlds.cotnd.Items import ItemType, all_items
-from worlds.cotnd.Options import CotNDOptions
+Validation runs in generate_early, so world-based tests read already-reconciled options.
+"""
+from worlds.cotnd.Options import DeathLinkType
+from worlds.cotnd.Utils import DLC
 from worlds.cotnd.Validation import (
-    validate_blacklist,
-    validate_modes,
-    validate_death_link_type,
-    validate_starting_zone,
-    cap_option,
+    MIN_SPEEDRUN_MINUTES,
+    available_characters,
     validate_price_ranges,
+    validate_speedrun_times,
 )
 
 from .bases import CotNDTestBase
+
+BASE_CHARACTERS = [
+    "Cadence", "Melody", "Aria", "Dorian", "Eli",
+    "Monk", "Dove", "Coda", "Bolt", "Bard", "Reaper",
+]
+
+AMPLIFIED_MODES = {"No Return", "Hard", "Phasing", "Randomizer", "Mystery"}
 
 
 # ---------------------------------------------------------------------------
 # Blacklist validation
 # ---------------------------------------------------------------------------
 
-class TestBlacklistAllChars(CotNDTestBase):
-    """Blacklisting every character should rescue Cadence to maintain progression."""
+class TestBlacklistEveryCharacter(CotNDTestBase):
+    """Blacklisting every character rescues Cadence, so progression stays possible."""
 
     options = {
-        "character_blacklist": [
-            "Cadence", "Melody", "Aria", "Dorian", "Eli", "Monk", "Dove",
-            "Coda", "Bolt", "Bard", "Reaper",
-        ],
+        "goal": "zones",
+        "character_blacklist": BASE_CHARACTERS,
         "dlc": [],
     }
 
-    def test_cadence_not_blacklisted(self) -> None:
-        blacklist = set(self.multiworld.worlds[self.player].options.character_blacklist.value)
-        self.assertNotIn("Cadence", blacklist)
+    def test_cadence_rescued(self) -> None:
+        self.assertNotIn("Cadence", self.world.options.character_blacklist.value)
 
-    def test_at_least_one_character_available(self) -> None:
-        world = self.multiworld.worlds[self.player]
-        chars = get_available_characters(
-            set(world.options.character_blacklist.value), world.dlcs
-        )
-        self.assertGreater(len(chars), 0)
+    def test_only_cadence_rescued(self) -> None:
+        """The rescue is minimal -- everyone else stays blacklisted."""
+        blacklist = set(self.world.options.character_blacklist.value)
+        self.assertEqual(blacklist, set(BASE_CHARACTERS) - {"Cadence"})
+
+    def test_a_character_survives(self) -> None:
+        characters = available_characters(DLC.BASE, set(self.world.options.character_blacklist.value))
+        self.assertEqual([item.name for item in characters], ["Cadence"])
 
 
-# ---------------------------------------------------------------------------
-# Death link type validation
-# ---------------------------------------------------------------------------
-
-class TestDeathLinkMarvWithoutAmplified(CotNDTestBase):
-    """Marv death link without Amplified DLC must fall back to Tempo."""
+class TestBlacklistStoryCharacters(CotNDTestBase):
+    """The Story goal needs its cast, so blacklisting them is overridden."""
 
     options = {
-        "death_link": "true",
-        "death_link_type": "Marv",
+        "goal": "story",
+        "character_blacklist": ["Cadence", "Melody", "Aria", "Bard"],
         "dlc": [],
     }
 
-    def test_death_link_type_is_not_marv(self) -> None:
-        death_link_type = self.multiworld.worlds[self.player].options.death_link_type.value
-        self.assertNotEqual(death_link_type, 2, "Marv requires Amplified DLC")
+    def test_story_characters_restored(self) -> None:
+        blacklist = set(self.world.options.character_blacklist.value)
+        self.assertTrue(blacklist.isdisjoint({"Cadence", "Melody", "Aria"}))
 
-    def test_death_link_type_is_tempo(self) -> None:
-        death_link_type = self.multiworld.worlds[self.player].options.death_link_type.value
-        self.assertEqual(death_link_type, 1)
+    def test_non_story_character_stays_blacklisted(self) -> None:
+        """Only the goal's own cast is rescued."""
+        self.assertIn("Bard", self.world.options.character_blacklist.value)
 
 
-class TestDeathLinkMarvWithAmplified(CotNDTestBase):
-    """Marv death link with Amplified DLC should remain as Marv."""
+class TestBlacklistStoryCharactersAmplified(CotNDTestBase):
+    """Nocturna joins the required cast only when Amplified is enabled."""
 
     options = {
-        "death_link": "true",
-        "death_link_type": "Marv",
+        "goal": "story",
+        "character_blacklist": ["Nocturna"],
         "dlc": ["Amplified"],
     }
 
-    def test_death_link_type_stays_marv(self) -> None:
-        death_link_type = self.multiworld.worlds[self.player].options.death_link_type.value
-        self.assertEqual(death_link_type, 2)
+    def test_nocturna_restored(self) -> None:
+        self.assertNotIn("Nocturna", self.world.options.character_blacklist.value)
+
+
+class TestBlacklistKeptWithoutStoryGoal(CotNDTestBase):
+    """Any other goal leaves the blacklist alone."""
+
+    options = {
+        "goal": "zones",
+        "character_blacklist": ["Cadence", "Melody"],
+        "dlc": [],
+    }
+
+    def test_blacklist_untouched(self) -> None:
+        self.assertEqual(set(self.world.options.character_blacklist.value), {"Cadence", "Melody"})
+
+
+# ---------------------------------------------------------------------------
+# DeathLink type validation
+# ---------------------------------------------------------------------------
+
+class TestDeathLinkMarvWithoutAmplified(CotNDTestBase):
+    """Marv requires Amplified, so it falls back to Tempo."""
+
+    options = {"death_link": "true", "death_link_type": "Marv", "dlc": []}
+
+    def test_falls_back_to_tempo(self) -> None:
+        self.assertEqual(self.world.options.death_link_type.value, DeathLinkType.option_Tempo)
+
+
+class TestDeathLinkMarvWithAmplified(CotNDTestBase):
+    options = {"death_link": "true", "death_link_type": "Marv", "dlc": ["Amplified"]}
+
+    def test_stays_marv(self) -> None:
+        self.assertEqual(self.world.options.death_link_type.value, DeathLinkType.option_Marv)
+
+
+class TestDeathLinkOtherTypesUntouched(CotNDTestBase):
+    options = {"death_link": "true", "death_link_type": "Absolute", "dlc": []}
+
+    def test_stays_absolute(self) -> None:
+        self.assertEqual(self.world.options.death_link_type.value, DeathLinkType.option_Absolute)
 
 
 # ---------------------------------------------------------------------------
 # Starting zone validation
 # ---------------------------------------------------------------------------
 
-class TestStartingZone5WithoutAmplified(CotNDTestBase):
-    """Starting Zone 5 without Amplified must be clamped to 4."""
+class TestStartingZoneClampedWithoutAmplified(CotNDTestBase):
+    """Zone 5 only exists in Amplified."""
 
-    options = {
-        "zone_access_keys": "separate",
-        "starting_zone": "zone_5",
-        "dlc": [],
-    }
+    options = {"zone_access_keys": "separate", "starting_zone": "zone_5", "dlc": []}
 
-    def test_starting_zone_clamped_to_4(self) -> None:
-        starting_zone = self.multiworld.worlds[self.player].starting_zone
-        self.assertEqual(starting_zone, 4)
+    def test_clamped_to_four(self) -> None:
+        self.assertEqual(self.world.options.starting_zone.value, 4)
 
 
-class TestStartingZone5WithAmplified(CotNDTestBase):
-    """Starting Zone 5 with Amplified should remain 5."""
+class TestStartingZoneKeptWithAmplified(CotNDTestBase):
+    options = {"zone_access_keys": "separate", "starting_zone": "zone_5", "dlc": ["Amplified"]}
 
-    options = {
-        "zone_access_keys": "separate",
-        "starting_zone": "zone_5",
-        "dlc": ["Amplified"],
-    }
-
-    def test_starting_zone_stays_5(self) -> None:
-        starting_zone = self.multiworld.worlds[self.player].starting_zone
-        self.assertEqual(starting_zone, 5)
+    def test_stays_five(self) -> None:
+        self.assertEqual(self.world.options.starting_zone.value, 5)
 
 
 # ---------------------------------------------------------------------------
-# Amplified modes stripped without Amplified DLC
+# Extra mode validation
 # ---------------------------------------------------------------------------
 
 class TestAmplifiedModesStrippedWithoutDLC(CotNDTestBase):
-    """Amplified-only modes must be removed when Amplified DLC is not enabled."""
-
-    amplified_modes = {"No Return", "Hard", "Phasing", "Randomizer", "Mystery"}
-
     options = {
         "dlc": [],
-        "included_extra_modes": ["No Return", "Hard", "Phasing", "Randomizer", "Mystery", "No Beat"],
+        "included_extra_modes": sorted(AMPLIFIED_MODES) + ["No Beat"],
     }
 
-    def test_amplified_modes_not_included(self) -> None:
-        included = set(self.multiworld.worlds[self.player].options.included_extra_modes.value)
-        self.assertTrue(
-            included.isdisjoint(self.amplified_modes),
-            f"Amplified modes should be removed without DLC, but found: {included & self.amplified_modes}",
-        )
+    def test_amplified_modes_removed(self) -> None:
+        included = set(self.world.options.included_extra_modes.value)
+        self.assertTrue(included.isdisjoint(AMPLIFIED_MODES))
 
-    def test_base_modes_still_included(self) -> None:
-        included = set(self.multiworld.worlds[self.player].options.included_extra_modes.value)
-        self.assertIn("No Beat", included)
+    def test_base_modes_kept(self) -> None:
+        self.assertIn("No Beat", self.world.options.included_extra_modes.value)
 
 
 class TestAmplifiedModesKeptWithDLC(CotNDTestBase):
-    """Amplified modes must remain when Amplified DLC is enabled."""
+    options = {"dlc": ["Amplified"], "included_extra_modes": ["No Return", "Hard", "No Beat"]}
+
+    def test_all_modes_kept(self) -> None:
+        included = set(self.world.options.included_extra_modes.value)
+        self.assertEqual(included, {"No Return", "Hard", "No Beat"})
+
+
+# ---------------------------------------------------------------------------
+# Starting character validation
+# ---------------------------------------------------------------------------
+
+class TestStartingCharacterFallsBack(CotNDTestBase):
+    """A character the pool cannot hold is replaced by one it can."""
+
+    options = {"starting_character": "Nocturna", "dlc": []}
+
+    def test_not_nocturna(self) -> None:
+        self.assertNotEqual(self.world.options.starting_character.current_option_name, "Nocturna")
+
+    def test_fallback_is_available(self) -> None:
+        chosen = self.world.options.starting_character.current_option_name
+        self.assertIn(chosen, BASE_CHARACTERS)
+
+
+class TestStartingCharacterFallsBackFromBlacklist(CotNDTestBase):
+    """The blacklist removes characters from the pool too."""
 
     options = {
-        "dlc": ["Amplified"],
-        "included_extra_modes": ["No Return", "Hard", "No Beat"],
+        "goal": "zones",
+        "starting_character": "Bard",
+        "character_blacklist": ["Bard"],
+        "dlc": [],
     }
 
-    def test_amplified_modes_kept(self) -> None:
-        included = set(self.multiworld.worlds[self.player].options.included_extra_modes.value)
-        self.assertIn("No Return", included)
-        self.assertIn("Hard", included)
+    def test_not_bard(self) -> None:
+        self.assertNotEqual(self.world.options.starting_character.current_option_name, "Bard")
+
+
+class TestStartingCharacterKept(CotNDTestBase):
+    options = {"starting_character": "Cadence", "dlc": []}
+
+    def test_stays_cadence(self) -> None:
+        self.assertEqual(self.world.options.starting_character.current_option_name, "Cadence")
 
 
 # ---------------------------------------------------------------------------
-# Price range validation (min/max swap)
+# Goal amount validation
 # ---------------------------------------------------------------------------
 
-class TestPriceRangeMinMaxSwap(unittest.TestCase):
-    """validate_price_ranges should swap min/max when min > max."""
+class TestAllZonesGoalCapped(CotNDTestBase):
+    """A goal cannot ask for more clears than there are characters to clear with."""
 
-    def _make_options(self, prefix, min_val, max_val):
-        """Build a minimal stub with the two price attributes."""
-        class Stub:
-            pass
+    options = {"goal": "all_zones", "all_zones_goal_clear": 20, "dlc": [], "character_blacklist": []}
 
-        class Val:
-            def __init__(self, v):
-                self.value = v
-            def __class_getitem__(cls, item):
-                return cls
+    def test_capped_to_character_count(self) -> None:
+        self.assertEqual(self.world.options.all_zones_goal_clear.value, len(BASE_CHARACTERS))
 
-        options = Stub()
-        min_attr = Val(min_val)
-        max_attr = Val(max_val)
-        type(min_attr).__init__ = lambda self, v: None.__init__()
-        # Use real option types via a simple namedtuple-like approach
-        setattr(options, f"{prefix}_price_min", type("O", (), {"value": min_val})())
-        setattr(options, f"{prefix}_price_max", type("O", (), {"value": max_val})())
-        return options
 
-    def test_price_swap(self) -> None:
-        from worlds.cotnd.Validation import ensure_min_max
+class TestZonesGoalCapped(CotNDTestBase):
+    options = {"goal": "zones", "zones_goal_clear": 100, "dlc": [], "character_blacklist": []}
 
-        class FakeOption:
-            def __init__(self, v):
-                self.value = v
+    def test_capped_to_characters_times_zones(self) -> None:
+        # Four zones without Amplified.
+        self.assertEqual(self.world.options.zones_goal_clear.value, len(BASE_CHARACTERS) * 4)
 
-        class Opts:
-            pass
 
-        opts = Opts()
-        opts.foo_price_min = FakeOption(10)
-        opts.foo_price_max = FakeOption(2)
+class TestGoalAmountUnderCapUntouched(CotNDTestBase):
+    options = {"goal": "all_zones", "all_zones_goal_clear": 3, "dlc": [], "character_blacklist": []}
 
-        # Patch ensure_min_max to accept our stub
-        type(opts.foo_price_min).__init__ = lambda self, v: setattr(self, "value", v)
-        type(opts.foo_price_max).__init__ = lambda self, v: setattr(self, "value", v)
+    def test_left_alone(self) -> None:
+        self.assertEqual(self.world.options.all_zones_goal_clear.value, 3)
 
-        ensure_min_max(opts, "foo_price_min", "foo_price_max")
-        self.assertLessEqual(opts.foo_price_min.value, opts.foo_price_max.value)
+
+class TestLuteShardsRaisedToGoal(CotNDTestBase):
+    """The pool must hold at least as many shards as the goal counts."""
+
+    options = {
+        "goal": "golden_lute_shards",
+        "golden_lute_shards_goal_clear": 30,
+        "lute_shards_in_pool": 5,
+    }
+
+    def test_pool_raised(self) -> None:
+        self.assertGreaterEqual(
+            self.world.options.lute_shards_in_pool.value,
+            self.world.options.golden_lute_shards_goal_clear.value,
+        )
+
+
+class TestLuteShardsAboveGoalUntouched(CotNDTestBase):
+    options = {
+        "goal": "golden_lute_shards",
+        "golden_lute_shards_goal_clear": 5,
+        "lute_shards_in_pool": 20,
+    }
+
+    def test_pool_left_alone(self) -> None:
+        self.assertEqual(self.world.options.lute_shards_in_pool.value, 20)
+
+
+# ---------------------------------------------------------------------------
+# Price ranges
+# ---------------------------------------------------------------------------
+
+class TestPriceRanges(CotNDTestBase):
+    """validate_price_ranges is called directly so each case gets its own bounds."""
+
+    options = {"dlc": []}
+
+    def _validate(self, **overrides) -> dict:
+        ranges = self.world.options.price_ranges.value
+        # Assigned one key at a time: the value is a Counter, whose update() adds.
+        for key, bound in overrides.items():
+            ranges[key] = bound
+        validate_price_ranges(self.world.options)
+        return ranges
+
+    def test_swaps_inverted_bounds(self) -> None:
+        ranges = self._validate(random_min=10, random_max=2)
+        self.assertEqual((ranges["random_min"], ranges["random_max"]), (2, 10))
+
+    def test_leaves_correct_bounds(self) -> None:
+        ranges = self._validate(useful_min=2, useful_max=8)
+        self.assertEqual((ranges["useful_min"], ranges["useful_max"]), (2, 8))
+
+    def test_equal_bounds_untouched(self) -> None:
+        ranges = self._validate(filler_min=5, filler_max=5)
+        self.assertEqual((ranges["filler_min"], ranges["filler_max"]), (5, 5))
+
+    def test_fills_missing_keys_from_defaults(self) -> None:
+        """Every key is optional in the YAML, so validation has to backfill."""
+        self.world.options.price_ranges.value.clear()
+        validate_price_ranges(self.world.options)
+        ranges = self.world.options.price_ranges.value
+        for prefix in ("random", "filler", "useful", "progression"):
+            self.assertIn(f"{prefix}_min", ranges)
+            self.assertLessEqual(ranges[f"{prefix}_min"], ranges[f"{prefix}_max"])
+
+
+# ---------------------------------------------------------------------------
+# All Zones speedrun times
+# ---------------------------------------------------------------------------
+
+class TestSpeedrunTimes(CotNDTestBase):
+    options = {"dlc": []}
+
+    def _validate(self, times: dict) -> dict:
+        self.world.options.all_zones_speedrun_times.value = times
+        validate_speedrun_times(self.world.options)
+        return times
+
+    def test_raises_below_minimum(self) -> None:
+        times = self._validate({"Cadence": 1, "Bard": 2})
+        self.assertEqual(times["Cadence"], MIN_SPEEDRUN_MINUTES)
+        self.assertEqual(times["Bard"], MIN_SPEEDRUN_MINUTES)
+
+    def test_zero_stays_disabled(self) -> None:
+        # Zero means untimed, so it is not a time to raise
+        self.assertEqual(self._validate({"Cadence": 0})["Cadence"], 0)
+
+    def test_valid_times_untouched(self) -> None:
+        times = self._validate({"Cadence": 3, "Reaper": 8})
+        self.assertEqual((times["Cadence"], times["Reaper"]), (3, 8))

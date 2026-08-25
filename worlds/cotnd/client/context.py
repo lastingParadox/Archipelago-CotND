@@ -19,10 +19,19 @@ from worlds.cotnd.Locations import (
     location_from_name,
     location_from_code,
     LocationType,
+    story_boss_keys,
 )
-from worlds.cotnd.Utils import trap_name_to_value
+from worlds.cotnd.Utils import parse_dlc_names, trap_name_to_value
 
 ModuleUpdate.update()
+
+# Locations whose item the mod spawns, so it needs the scout result up front
+SCOUTED_LOCATION_TYPES = (
+    LocationType.SHOP,
+    LocationType.TUTORIAL,
+    LocationType.ZONE_ITEM,
+    LocationType.FLAWLESS_CHEST,
+)
 
 
 class CotNDCommandProcessor(ClientCommandProcessor):
@@ -177,6 +186,21 @@ class CotNDContext(CommonContext):
 
         await super().disconnect(allow_autoreconnect)
 
+    async def connection_closed(self) -> None:
+        """Handle the socket dropping without a deliberate disconnect."""
+        self.last_forwarded_index = 0
+        self.game_last_received_index = None
+
+        try:
+            await self.cotnd_server.send_packet({
+                "datatype": "Disconnected",
+                "reason": "Lost connection to the Archipelago server",
+            })
+        except Exception as e:
+            logger.warning(f"Failed to send connection-loss notice: {e}")
+
+        await super().connection_closed()
+
     def on_deathlink(self, data: Dict[str, str]):
         asyncio.create_task(self.cotnd_server.send_packet({
             "datatype": "Death",
@@ -221,18 +245,23 @@ class CotNDContext(CommonContext):
         }]))
         asyncio.create_task(self.cotnd_server.start(), name="CotNDServer")
 
+    def story_boss_keys(self) -> list[tuple[str, str]]:
+        return story_boss_keys(parse_dlc_names(self.slotdata.get("dlc") or []))
+
     def log_goal_progress(self) -> None:
         self.ap_savedata.refresh()
         sd = self.slotdata
-        goal_int = sd.get("goal")
-        if goal_int == 0:
-            goal_type, required = "All Zones", sd.get("all_zones_goal_clear", 0)
-        elif goal_int == 2:
-            goal_type, required = "Golden Lute Shards", sd.get("golden_lute_shards_goal_clear", 0)
-        else:
-            goal_type, required = "Zones", sd.get("zones_goal_clear", 0)
+        goal_type = sd.get("goal", "Story")
+        required = sd.get("goal_required", 0)
 
-        if goal_type == "Golden Lute Shards":
+        if goal_type == "Story":
+            char_locs = self.ap_savedata.character_locations
+            progress = sum(
+                1
+                for character, boss in self.story_boss_keys()
+                if char_locs.get(character, {}).get(boss)
+            )
+        elif goal_type == "Golden Lute Shards":
             progress = self.ap_savedata.golden_lute_shards
         else:
             progress = 0
@@ -245,13 +274,7 @@ class CotNDContext(CommonContext):
                     elif goal_type == "All Zones" and key == "All Zones":
                         progress += 1
 
-        victory_trigger_names = {
-            "disabled": "Disabled",
-            "ensemble": "Ensemble",
-            "boss_rush": "Boss Rush",
-            "expensive_purchase": "Expensive Purchase",
-        }
-        victory_trigger = victory_trigger_names.get(sd.get("victory_trigger", ""), "Ensemble")
+        victory_trigger = sd.get("victory_trigger", "ensemble").replace("_", " ").title()
         logger.info(f"Goal Progress: {goal_type} ({progress}/{required}) | Victory condition: {victory_trigger}")
 
     def _on_received_items(self, args: dict):
@@ -334,7 +357,6 @@ class CotNDContext(CommonContext):
             return
         # Restore non-derivable state; derivable state is recomputed in _send_state.
         self.ap_savedata = CotNDSaveData.from_datastorage(keys_dict[save_key], self)
-        self.ap_savedata.ensure_received_items_initialized()
 
         if self.ap_savedata.death_link is None:
             self.ap_savedata.death_link = bool(self.slotdata.get("death_link", False))
@@ -380,6 +402,7 @@ class CotNDContext(CommonContext):
         # Partially refresh — only scout-derived fields need recomputing.
         self.ap_savedata.shop_locations = self.ap_savedata._compute_shop_locations()
         self.ap_savedata.codex_locations = self.ap_savedata._compute_codex_locations()
+        self.ap_savedata.chest_locations = self.ap_savedata._compute_chest_locations()
         self.ap_savedata.scouted_locations = bool(self.ap_savedata.stored_scouts)
 
         asyncio.create_task(self.cotnd_server.send_packet({
@@ -567,6 +590,7 @@ class CotNDContext(CommonContext):
         self.ap_savedata.unlocked_npcs = self.ap_savedata._compute_unlocked_npcs()
         self.ap_savedata.shop_locations = self.ap_savedata._compute_shop_locations()
         self.ap_savedata.codex_locations = self.ap_savedata._compute_codex_locations()
+        self.ap_savedata.chest_locations = self.ap_savedata._compute_chest_locations()
         await self._persist_and_push()
 
     async def _event_hint_npc(self, data: dict):
@@ -658,17 +682,20 @@ class CotNDContext(CommonContext):
             "checked_locations": [location_from_code(loc).name for loc in self.checked_locations],
             "world_version": self.slotdata.get("world_version", ""),
             "items": items_list,
+            # Only State carries the history; SaveUpdate leaves it to the Items packet.
+            "received_items": self.ap_savedata.received_items_for_state(),
             **self.ap_savedata.to_state_fields(),
         }
 
         if is_init:
-            state_packet.update(self._build_init_config())
-            # Scout all shop and tutorial locations so save data can be populated.
+            # Slot data is already mod-shaped, so a new option needs no change here.
+            state_packet.update(self.slotdata)
+            # Scout every location whose item the mod has to spawn in-game.
             await self.send_msgs([{
                 "cmd": "LocationScouts",
                 "locations": [
                     loc_id for loc_id in self.missing_locations
-                    if location_from_code(loc_id).type in (LocationType.SHOP, LocationType.TUTORIAL)
+                    if location_from_code(loc_id).type in SCOUTED_LOCATION_TYPES
                 ],
             }])
 
@@ -679,81 +706,6 @@ class CotNDContext(CommonContext):
         # Persist on init so DataStorage immediately reflects the full snapshot.
         if is_init:
             await self._persist_save()
-
-    def _build_init_config(self) -> dict:
-        """Slot config fields added to the State packet on first init only."""
-        sd = self.slotdata
-        death_link_type = sd.get("death_link_type", 1)
-        if death_link_type == 0:
-            death_link_type_str = "Absolute"
-        elif death_link_type == 2:
-            death_link_type_str = "Marv"
-        else:
-            death_link_type_str = "Tempo"
-
-        goal_int = sd.get("goal")
-        if goal_int == 0:
-            goal_str = "All Zones"
-            goal_required = sd.get("all_zones_goal_clear")
-        elif goal_int == 2:
-            goal_str = "Golden Lute Shards"
-            goal_required = sd.get("golden_lute_shards_goal_clear")
-        else:
-            goal_str = "Zones"
-            goal_required = sd.get("zones_goal_clear")
-
-        return {
-            "goal": goal_str,
-            "goal_required": goal_required,
-            "death_link_type": death_link_type_str,
-            "death_link_trigger": "Each Death" if sd.get("death_link_trigger") == 1 else "Game Over",
-            "per_level_checks": sd.get("floor_clear_checks", 0) != 0,
-            "included_extra_modes": sd.get("included_extra_modes"),
-            "dlc": sd.get("dlc"),
-            "character_blacklist": sd.get("character_blacklist"),
-            "character_unlocks": sd.get("character_unlocks"),
-            "include_unique_items": sd.get("include_unique_items"),
-            "include_materials": sd.get("include_materials", 0),
-            "include_shrine_checks": sd.get("include_shrine_checks", 1),
-            "zone_access_keys": sd.get("zone_access_keys"),
-            "starting_zone": sd.get("starting_zone"),
-            "lock_character_room": sd.get("lock_character_room"),
-            "buff_items": sd.get("buff_items"),
-            "victory_trigger": sd.get("victory_trigger"),
-            "expensive_purchase_price": sd.get("expensive_purchase_price"),
-            "diamond_exchange_rate": sd.get("diamond_exchange_rate", 100),
-            "caged_npc_locations": sd.get("caged_npc_locations"),
-            "npc_hint_locations": sd.get("npc_hint_locations"),
-            "pricing": self._build_pricing(),
-        }
-
-    def _build_pricing(self) -> dict:
-        """Expand the price_ranges option into the shape the mod expects.
-
-        The packet keeps its original nested form so consolidating the options
-        stayed an apworld-side change.
-        """
-        ranges = self.slotdata.get("price_ranges") or {}
-        defaults = {
-            "random_min": 1, "random_max": 10,
-            "filler_min": 1, "filler_max": 4,
-            "useful_min": 2, "useful_max": 8,
-            "progression_min": 4, "progression_max": 10,
-        }
-
-        def pair(prefix: str) -> dict:
-            return {
-                "min": ranges.get(f"{prefix}_min", defaults[f"{prefix}_min"]),
-                "max": ranges.get(f"{prefix}_max", defaults[f"{prefix}_max"]),
-            }
-
-        return {
-            "type": self.slotdata.get("price_randomization"),
-            "general_price_range": pair("random"),
-            "filler_price_range": pair("filler"),
-            "useful_price_range": pair("useful"),
-            "progression_price_range": pair("progression"),
-        }
 
     # ------------------------------------------------------------------ #
     # TrapLink                                                             #

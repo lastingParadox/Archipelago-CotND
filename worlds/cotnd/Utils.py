@@ -1,93 +1,106 @@
 import json
 import pkgutil
 import re
-from enum import Enum
+from collections.abc import Iterable
+from enum import Flag, auto
 from random import Random
-from typing import Iterable, Dict, Any, Set
+from typing import Any, Final
 
 # Minimum AP Redux mod version this apworld will accept a connection from.
-# Kept in archipelago.json (next to world_version)
-_archipelago_metadata: dict = json.loads(
-    pkgutil.get_data(__name__, "archipelago.json") or b"{}"
-)
+_archipelago_metadata: dict = json.loads(pkgutil.get_data(__name__, "archipelago.json") or b"{}")
 MIN_MOD_VERSION: str = _archipelago_metadata.get("minimum_mod_version", "0.0.0")
-
 
 def parse_version(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in re.findall(r"\d+", version or ""))
 
-
 def version_at_least(actual: str, minimum: str) -> bool:
     if actual == "":
         return False
+
     return parse_version(actual) >= parse_version(minimum)
 
+def warn(message: str) -> None:
+    #Report an option combination that had to be reconciled during generation.
+    print(f"[WARNING] {message}")
 
-LOBBY_NPCS = ["Codex", "Merlin", "Hintmaster", "Janitor", "Diamond Dealer"]
-EXTRA_MODES = {
-    "base": ["No Beat", "Double Tempo", "Low Percent"],
-    "amplified": ["Phasing", "Randomizer", "Mystery", "Hard", "No Return"],
-}
+def parse_dlc_names(names: Iterable[str]) -> "DLC":
+    #Turn option/slot-data display names ("Shovel Knight") into the flag.
+    return DLC.parse(name.replace(" ", "_") for name in names)
 
-class DLC(Enum):
-    BASE = "base"
-    AMPLIFIED = "amplified"
-    SYNCHRONY = "synchrony"
-    MIKU = "miku"
-    SHOVEL_KNIGHT = "shovel knight"
+def owned_dlc(world) -> "DLC":
+    #The DLCs this slot enabled, as a flag.
+    return parse_dlc_names(world.options.dlc)
 
-def normalize_dlc(dlc: Iterable[str]) -> set[DLC]:
-    return {DLC(d.lower()) for d in dlc}
+def max_zone(dlc: "DLC") -> int:
+    #Zone 5 only exists in Amplified.
+    return 5 if DLC.AMPLIFIED in dlc else 4
 
+def characters_for_shrine(shrine_name: str, character_names: Iterable[str]) -> set[str]:
+    # The characters that can actually meet this shrine's condition.
+    banned = SHRINE_BANS.get(shrine_name, set())
 
-def assign_caged_npcs(random: Random, dlc: Set[str]) -> Dict[str, Dict[str, Any]]:
-    zones = [1, 2, 3, 4, 5] if "amplified" in dlc else [1, 2, 3, 4]
-    levels = [1, 2, 3]
+    return {name for name in character_names if not (CHARACTER_SHRINE_BANS.get(name, set()) & banned)}
 
-    # Distribute zones as evenly as possible
+def shrine_has_valid_character(shrine_name: str, character_names: Iterable[str]) -> bool:
+    # A shrine nobody can meet never spawns, so we shouldn't be including it
+    return bool(characters_for_shrine(shrine_name, character_names))
+
+LOBBY_NPCS: Final = ["Codex", "Merlin", "Hintmaster", "Janitor", "Diamond Dealer"]
+NPC_UNLOCK_TYPES: Final = ("Shop", "Dig", "Glass")
+NPC_UNLOCK_WEIGHTS: Final = (0.6, 0.3, 0.1)
+FLOORS_PER_ZONE: Final = 3
+
+def assign_caged_npcs(random: Random, dlc: "DLC") -> dict[str, dict[str, Any]]:
+    # Scatter the lobby NPCs through the dungeon, one cage each
+    zones = list(range(1, max_zone(dlc) + 1))
+    levels = list(range(1, FLOORS_PER_ZONE + 1))
+
+    # Spread across zones as evenly as the NPC count allows.
     npc_zones = [zones[i % len(zones)] for i in range(len(LOBBY_NPCS))]
     random.shuffle(npc_zones)
 
-    # Ensure each unlockType is used at least once
-    unlock_types = ["Shop", "Dig", "Glass"]
-    remaining = len(LOBBY_NPCS) - len(unlock_types)
+    # Every unlock type appears at least once; the remainder are weighted.
+    unlocks = list(NPC_UNLOCK_TYPES) + random.choices(
+        NPC_UNLOCK_TYPES, weights=NPC_UNLOCK_WEIGHTS, k=len(LOBBY_NPCS) - len(NPC_UNLOCK_TYPES))
+    random.shuffle(unlocks)
 
-    # Fill remaining with weighted random choices
-    weighted_choices = random.choices(
-        ["Shop", "Dig", "Glass"],
-        weights=[0.6, 0.3, 0.1],
-        k=remaining
-    )
+    # Fill a zone's floors before doubling any of them up.
+    used: dict[int, set[int]] = {}
+    assigned_levels: list[int] = []
 
-    # Combine guaranteed + random
-    all_unlocks = unlock_types + weighted_choices
-    random.shuffle(all_unlocks)
-
-    # Fill each zone's floors before doubling any of them up
-    used_levels: Dict[int, Set[int]] = {}
-    adjusted_levels = []
-    for zone, unlock in zip(npc_zones, all_unlocks):
-        # Glass shrines can't be placed on a zone's first floor.
+    for zone, unlock in zip(npc_zones, unlocks):
+        # Glass shrines cannot spawn on a zone's first floor.
         candidates = [level for level in levels if unlock != "Glass" or level != 1]
-        taken = used_levels.setdefault(zone, set())
+        taken = used.setdefault(zone, set())
         free = [level for level in candidates if level not in taken]
+
         if not free:
             taken.clear()
             free = candidates
+
         level = random.choice(free)
         taken.add(level)
-        adjusted_levels.append(level)
+        assigned_levels.append(level)
 
-    return {
-        npc: {
-            "zone": zone,
-            "level": level,
-            "unlockType": unlock_type
-        }
-        for npc, zone, level, unlock_type in zip(LOBBY_NPCS, npc_zones, adjusted_levels, all_unlocks)
-    }
+    return {npc: {"zone": zone, "level": level, "unlockType": unlock}
+            for npc, zone, level, unlock in zip(LOBBY_NPCS, npc_zones, assigned_levels, unlocks)}
 
-character_requirements = {
+class DLC(Flag):
+    NONE          = 0
+    BASE          = auto()
+    AMPLIFIED     = auto()
+    SYNCHRONY     = auto()
+    MIKU          = auto()
+    SHOVEL_KNIGHT = auto()
+
+    @classmethod
+    def parse(cls, names: Iterable[str]) -> "DLC":
+        combined = cls.NONE
+        for name in names:
+            combined |= cls[name.upper()]
+        return combined
+
+CHARACTER_ITEM_REQUIREMENTS = {
     "Melody": {"Golden Lute"},
     "Aria": {"Potion", "Nazar Charm"},
     "Dorian": {"Boots of Leaping", "Dorian's Plate Armor"},
@@ -105,14 +118,39 @@ character_requirements = {
     "Shovel Knight": {"Shovel Blade"}
 }
 
-# Maps incoming TrapLink trap names to a CotND trap handler.
-# Values are one of:
-#   None                        - recognised but unimplemented; silently dropped
-#   "HandlerId"                 - queued in the mod under that TrapHandler ID
-#   ("HandlerId", {args})       - queued with handler-specific args,
-#                                 e.g. ("SummonTrap", {"variant": "Beetle"})
-# Handler IDs that belong to a pool item respect that item's trap_weights entry;
-# TrapLink-only handlers respect the traplink_excluded_traps option instead.
+CHARACTER_SHRINE_BANS = {
+    "Melody": {"weaponlocked"},
+    "Aria": {"healthlocked", "weaponlocked"},
+    "Eli": {"weaponlocked"},
+    "Dove": {"pacifist", "weaponlocked"},
+    "Coda": {"healthlocked", "weaponlocked"},
+    "Bard": {"rhythmless"},
+    "Diamond": {"diamond"},
+    "Tempo": {"tempo"},
+    "Klarinetta": {"weaponlocked", "diamond"},
+    "Suzu": {"weaponlocked", "shovellocked"},
+    "Chaunter": {"shovellocked"},
+    "Hatsune Miku": {"weaponlocked", "shovellocked"},
+    "Shovel Knight": {"weaponlocked", "diamond"},
+}
+
+SHRINE_BANS = {
+    "Shrine of Blood": {"healthlocked", "weaponlocked"},
+    "Shrine of Peace": {"weaponlocked"},
+    "Shrine of Rhythm": {"rhythmless"},
+    "Shrine of Risk": {"diamond", "healthlocked"},
+    "Shrine of Sacrifice": {"pacifist"},
+    "Shrine of Space": {"shovellocked"},
+    "Shrine of No Return": {"weaponlocked"},
+    "Shrine of Phasing": {"pacifist"},
+    "Shrine of Pace": {"rhythmless"},
+    "Shrine of Pain": {"healthlocked"},
+    "Shrine of Uncertainty": {"tempo", "weaponlocked"},
+    "Shrine of the Feast": {"healthlocked"},
+    "Shrine of Fire": {"pacifist"},
+}
+
+# Trap handler ids the mod understands, keyed by item name.
 trap_name_to_value = {
     "144p Trap": "144pTrap",
     "Aaa Trap": "AaaTrap",

@@ -12,7 +12,7 @@ class TestZoneAccessDisabledNoGating(CotNDTestBase):
 
     options = {
         "zone_access_keys": "disabled",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "starting_character": "Cadence",
         "character_blacklist": [],
         "dlc": [],
@@ -36,7 +36,7 @@ class TestSeparateZoneAccessKeys(CotNDTestBase):
 
     options = {
         "zone_access_keys": "separate",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "starting_zone": "zone_1",
         "starting_character": "Cadence",
         "character_blacklist": [],
@@ -74,7 +74,7 @@ class TestSeparateZoneStartingZone3(CotNDTestBase):
 
     options = {
         "zone_access_keys": "separate",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "starting_zone": "zone_3",
         "starting_character": "Cadence",
         "character_blacklist": [],
@@ -107,7 +107,7 @@ class TestProgressiveZoneAccessKeys(CotNDTestBase):
 
     options = {
         "zone_access_keys": "progressive",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "starting_zone": "zone_1",
         "starting_character": "Cadence",
         "character_blacklist": [],
@@ -147,7 +147,7 @@ class TestCharacterRoomKeyBlocks(CotNDTestBase):
 
     options = {
         "lock_character_room": "true",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "starting_character": "Cadence",
         "character_blacklist": [],
         "dlc": [],
@@ -173,7 +173,7 @@ class TestCharacterRoomKeyDisabled(CotNDTestBase):
 
     options = {
         "lock_character_room": "false",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "starting_character": "Cadence",
         "character_blacklist": [],
         "dlc": [],
@@ -208,16 +208,25 @@ class TestCharacterRequirementsHard(CotNDTestBase):
 
     options = {
         "character_unlocks": "Required_Items_Hard",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "include_unique_items": "true",
         "starting_character": "Cadence",
         "character_blacklist": [],
-        "dlc": [],
+        # Eli's Hand needs Amplified *and* include_unique_items to exist at all;
+        # without both, Rules.py skips the requirement and the test is vacuous.
+        "dlc": ["Amplified"],
+        # CollectionState seeds itself from precollected_items, and the default 25%
+        # starting inventory would randomly hand out the very items under test.
+        "starting_inventory": 0,
         "zone_access_keys": "disabled",
     }
 
     def _fresh_state(self):
-        """Return an empty CollectionState, unaffected by precollected starting inventory."""
+        """A state holding only this world's precollected items.
+
+        Note CollectionState seeds itself from multiworld.precollected_items, so
+        classes using this must pin starting_inventory to keep results stable.
+        """
         return CollectionState(self.multiworld)
 
     def _can_reach(self, state, location_name: str) -> bool:
@@ -248,12 +257,38 @@ class TestCharacterRequirementsHard(CotNDTestBase):
         self.assertTrue(self._can_reach(state, "Eli - Zone 1"))
 
 
+class TestCharacterRequirementsSkipUnavailableDLC(CotNDTestBase):
+    """A requirement from a DLC the slot does not own cannot gate anything.
+
+    Eli is a base character whose Hand is Amplified-only. Gating him on it without that
+    DLC makes every Eli location unreachable, which fails generation outright.
+    """
+
+    options = {
+        "character_unlocks": "Required_Items_Hard",
+        "zone_progress_checks": 1,
+        "include_unique_items": "true",
+        "starting_character": "Cadence",
+        "character_blacklist": [],
+        "dlc": [],
+        "starting_inventory": 0,
+        "zone_access_keys": "disabled",
+    }
+
+    def test_eli_accessible_without_amplified(self) -> None:
+        state = CollectionState(self.multiworld)
+        state.collect(self.get_item_by_name("Eli"))
+        self.assertTrue(
+            self.multiworld.get_location("Eli - Zone 1", self.player).can_reach(state),
+            "Eli's Hand is Amplified-only and must not gate Eli without that DLC")
+
+
 class TestCharacterRequirementsItemOnly(CotNDTestBase):
     """With character_unlocks=Item_Only, only the character item is needed."""
 
     options = {
         "character_unlocks": "Item_Only",
-        "floor_clear_checks": "false",
+        "zone_progress_checks": 1,
         "starting_character": "Cadence",
         "character_blacklist": [],
         "dlc": [],
@@ -341,7 +376,7 @@ class TestCodexLocationsRequireCodex(CotNDTestBase):
 # ---------------------------------------------------------------------------
 
 class TestExtraModeLocationsRequireMode(CotNDTestBase):
-    """Extra mode locations require both the character and the mode item."""
+    """Extra mode locations are one per mode, not per character, and need the mode item."""
 
     options = {
         "included_extra_modes": ["No Beat"],
@@ -353,15 +388,32 @@ class TestExtraModeLocationsRequireMode(CotNDTestBase):
 
     def test_no_beat_blocked_without_mode(self) -> None:
         self.collect_by_name("Cadence")
-        self.assertFalse(self.can_reach_location("Cadence - No Beat"))
+        self.assertFalse(self.can_reach_location("No Beat Mode"))
 
-    def test_no_beat_blocked_without_character(self) -> None:
+    def test_no_beat_accessible_with_mode(self) -> None:
         self.collect_by_name("No Beat Mode")
-        self.assertFalse(self.can_reach_location("Melody - No Beat"))
+        self.assertTrue(self.can_reach_location("No Beat Mode"))
 
-    def test_no_beat_accessible_with_both(self) -> None:
-        self.collect_by_name(["Cadence", "No Beat Mode"])
-        self.assertTrue(self.can_reach_location("Cadence - No Beat"))
+
+class TestExtraModeLocationsRequireZoneAccess(CotNDTestBase):
+    """EXTRA_MODE sits in all_zones_types, so the mode item alone is not enough."""
+
+    options = {
+        "included_extra_modes": ["No Beat"],
+        "starting_character": "Cadence",
+        "character_blacklist": [],
+        "dlc": [],
+        "zone_access_keys": "progressive",
+    }
+
+    def test_blocked_without_full_zone_access(self) -> None:
+        self.collect_by_name("No Beat Mode")
+        self.assertFalse(self.can_reach_location("No Beat Mode"))
+
+    def test_accessible_with_full_zone_access(self) -> None:
+        self.collect_by_name("No Beat Mode")
+        self.collect_by_name("Progressive Zone Access")
+        self.assertTrue(self.can_reach_location("No Beat Mode"))
 
 
 # ---------------------------------------------------------------------------
@@ -369,40 +421,302 @@ class TestExtraModeLocationsRequireMode(CotNDTestBase):
 # ---------------------------------------------------------------------------
 
 class TestGoalAllZonesCompletion(CotNDTestBase):
-    """All Zones goal: completion requires the configured number of Complete events."""
+    """All Zones goal: completion requires the configured number of Complete events.
+
+    Zone keys are off so the goal count is the only thing gating the catalyst; the
+    Ensemble trigger's own zone requirement is covered by TestEnsembleRequiresZoneAccess.
+    """
 
     options = {
         "goal": "All_Zones",
         "all_zones_goal_clear": 2,
         "starting_character": "Cadence",
         "character_blacklist": [],
+        "zone_access_keys": "disabled",
         "dlc": [],
     }
 
     def test_goal_not_met_with_one_complete(self) -> None:
-        self.multiworld.state.add_item("Complete", self.player, 1)
-        self.assertFalse(self.multiworld.completion_condition[self.player](self.multiworld.state))
+        state = CollectionState(self.multiworld)
+        state.add_item("Complete", self.player, 1)
+        self.assertFalse(self._can_reach(state, "Ensemble Completion"))
 
     def test_goal_met_with_two_completes(self) -> None:
-        self.multiworld.state.add_item("Complete", self.player, 2)
-        self.assertTrue(self.multiworld.completion_condition[self.player](self.multiworld.state))
+        state = CollectionState(self.multiworld)
+        state.add_item("Complete", self.player, 2)
+        self.assertTrue(self._can_reach(state, "Ensemble Completion"))
+
+    def _can_reach(self, state, location_name: str) -> bool:
+        return self.multiworld.get_location(location_name, self.player).can_reach(state)
 
 
 class TestGoalZonesCompletion(CotNDTestBase):
-    """Zones goal: completion requires the configured number of Complete events."""
+    """Zones goal: completion requires the configured number of Complete events.
+
+    Zone keys are off so the goal count is the only thing gating the catalyst; the
+    Ensemble trigger's own zone requirement is covered by TestEnsembleRequiresZoneAccess.
+    """
 
     options = {
         "goal": "Zones",
         "zones_goal_clear": 3,
         "starting_character": "Cadence",
         "character_blacklist": [],
+        "zone_access_keys": "disabled",
         "dlc": [],
     }
 
     def test_goal_not_met_with_two_completes(self) -> None:
-        self.multiworld.state.add_item("Complete", self.player, 2)
-        self.assertFalse(self.multiworld.completion_condition[self.player](self.multiworld.state))
+        state = CollectionState(self.multiworld)
+        state.add_item("Complete", self.player, 2)
+        self.assertFalse(self._can_reach(state, "Ensemble Completion"))
 
     def test_goal_met_with_three_completes(self) -> None:
-        self.multiworld.state.add_item("Complete", self.player, 3)
-        self.assertTrue(self.multiworld.completion_condition[self.player](self.multiworld.state))
+        state = CollectionState(self.multiworld)
+        state.add_item("Complete", self.player, 3)
+        self.assertTrue(self._can_reach(state, "Ensemble Completion"))
+
+    def _can_reach(self, state, location_name: str) -> bool:
+        return self.multiworld.get_location(location_name, self.player).can_reach(state)
+
+
+# ---------------------------------------------------------------------------
+# Victory trigger zone gating
+# ---------------------------------------------------------------------------
+
+class _VictoryTriggerBase(CotNDTestBase):
+    """Shared setup: progressive keys so full zone access is a real requirement."""
+
+    def _state_with_goal_met(self) -> CollectionState:
+        state = CollectionState(self.multiworld)
+        state.add_item("Complete", self.player, 3)
+        return state
+
+    def _can_reach(self, state, location_name: str) -> bool:
+        return self.multiworld.get_location(location_name, self.player).can_reach(state)
+
+
+class TestExpensivePurchaseIgnoresZoneAccess(_VictoryTriggerBase):
+    """Buying a lobby item is not played across the zones, so it must not need them."""
+
+    options = {
+        "goal": "Zones",
+        "zones_goal_clear": 3,
+        "victory_trigger": "Expensive_Purchase",
+        "zone_access_keys": "progressive",
+        "starting_character": "Cadence",
+        "character_blacklist": [],
+        "dlc": [],
+    }
+
+    def test_reachable_without_full_zone_access(self) -> None:
+        self.assertTrue(
+            self._can_reach(self._state_with_goal_met(), "Expensive Purchase Completion")
+        )
+
+
+class TestEnsembleRequiresZoneAccess(_VictoryTriggerBase):
+    """Ensemble is played across every zone, so it keeps the requirement."""
+
+    options = {
+        "goal": "Zones",
+        "zones_goal_clear": 3,
+        "victory_trigger": "Ensemble",
+        "zone_access_keys": "progressive",
+        "starting_character": "Cadence",
+        "character_blacklist": [],
+        "dlc": [],
+    }
+
+    def test_blocked_without_full_zone_access(self) -> None:
+        self.assertFalse(
+            self._can_reach(self._state_with_goal_met(), "Ensemble Completion")
+        )
+
+    def test_reachable_with_full_zone_access(self) -> None:
+        state = self._state_with_goal_met()
+        state.add_item("Progressive Zone Access", self.player, 4)
+        self.assertTrue(self._can_reach(state, "Ensemble Completion"))
+
+
+class TestBossRushRequiresZoneAccess(_VictoryTriggerBase):
+    """Boss Rush runs all zone bosses in sequence, so it keeps the requirement too."""
+
+    options = {
+        "goal": "Zones",
+        "zones_goal_clear": 3,
+        "victory_trigger": "Boss_Rush",
+        "zone_access_keys": "progressive",
+        "starting_character": "Cadence",
+        "character_blacklist": [],
+        "dlc": [],
+    }
+
+    def test_blocked_without_full_zone_access(self) -> None:
+        self.assertFalse(
+            self._can_reach(self._state_with_goal_met(), "Boss Rush Completion")
+        )
+
+
+class TestDisabledTriggerIgnoresZoneAccess(_VictoryTriggerBase):
+    """With no catalyst, meeting the goal is the whole requirement."""
+
+    options = {
+        "goal": "Zones",
+        "zones_goal_clear": 3,
+        "victory_trigger": "Disabled",
+        "zone_access_keys": "progressive",
+        "starting_character": "Cadence",
+        "character_blacklist": [],
+        "dlc": [],
+    }
+
+    def test_reachable_without_full_zone_access(self) -> None:
+        self.assertTrue(
+            self._can_reach(self._state_with_goal_met(), "Goal Completion")
+        )
+
+    def test_still_blocked_without_the_goal(self) -> None:
+        self.assertFalse(
+            self._can_reach(CollectionState(self.multiworld), "Goal Completion")
+        )
+
+
+# ---------------------------------------------------------------------------
+# Story goal
+# ---------------------------------------------------------------------------
+
+STORY_EVENTS_BASE = [
+    "Cadence - Beat Dead Ringer",
+    "Cadence - Beat NecroDancer",
+    "Melody - Beat NecroDancer",
+    "Aria - Beat Golden Lute",
+]
+
+STORY_EVENTS_AMPLIFIED = STORY_EVENTS_BASE + [
+    "Nocturna - Beat Frankensteinway",
+    "Nocturna - Beat The Conductor",
+]
+
+
+class TestStoryGoalIsDefault(CotNDTestBase):
+    options = {"dlc": []}
+
+    def test_default_goal_is_story(self) -> None:
+        self.assertEqual(self.world.options.goal.current_key, "story")
+
+
+class _StoryGoalBase(CotNDTestBase):
+    def _location_names(self) -> set[str]:
+        return {loc.name for loc in self.multiworld.get_locations(self.player)}
+
+    def _can_reach(self, state, location_name: str) -> bool:
+        return self.multiworld.get_location(location_name, self.player).can_reach(state)
+
+
+class TestStoryGoalBase(_StoryGoalBase):
+    """Without Amplified the story stops at Aria; Nocturna's fights must not appear."""
+
+    options = {
+        "goal": "Story",
+        "dlc": [],
+        "zone_access_keys": "disabled",
+        "starting_inventory": 0,
+        "character_blacklist": [],
+    }
+
+    def test_story_events_present(self) -> None:
+        names = self._location_names()
+        for event in STORY_EVENTS_BASE:
+            self.assertIn(event, names)
+
+    def test_nocturna_events_absent(self) -> None:
+        names = self._location_names()
+        self.assertNotIn("Nocturna - Beat Frankensteinway", names)
+        self.assertNotIn("Nocturna - Beat The Conductor", names)
+
+    def test_zone_events_absent(self) -> None:
+        """Story keeps only its own completion events."""
+        names = self._location_names()
+        self.assertNotIn("Cadence - Beat Zone 1", names)
+        self.assertNotIn("Cadence - Beat All Zones", names)
+
+    def test_victory_needs_every_story_event(self) -> None:
+        state = CollectionState(self.multiworld)
+        for event in STORY_EVENTS_BASE[:-1]:
+            state.add_item(event, self.player, 1)
+        self.assertFalse(self._can_reach(state, "Ensemble Completion"))
+
+        state.add_item(STORY_EVENTS_BASE[-1], self.player, 1)
+        self.assertTrue(self._can_reach(state, "Ensemble Completion"))
+
+
+class TestStoryGoalAmplified(_StoryGoalBase):
+    """With Amplified the story extends through Nocturna."""
+
+    options = {
+        "goal": "Story",
+        "dlc": ["Amplified"],
+        "zone_access_keys": "disabled",
+        "starting_inventory": 0,
+        "character_blacklist": [],
+    }
+
+    def test_all_six_story_events_present(self) -> None:
+        names = self._location_names()
+        for event in STORY_EVENTS_AMPLIFIED:
+            self.assertIn(event, names)
+
+    def test_victory_needs_nocturna_too(self) -> None:
+        state = CollectionState(self.multiworld)
+        for event in STORY_EVENTS_BASE:
+            state.add_item(event, self.player, 1)
+        self.assertFalse(self._can_reach(state, "Ensemble Completion"))
+
+        for event in STORY_EVENTS_AMPLIFIED[len(STORY_EVENTS_BASE):]:
+            state.add_item(event, self.player, 1)
+        self.assertTrue(self._can_reach(state, "Ensemble Completion"))
+
+
+class TestStoryGoalOverridesBlacklist(_StoryGoalBase):
+    """Blacklisting a story character would make the goal unreachable."""
+
+    options = {
+        "goal": "Story",
+        "dlc": [],
+        "character_blacklist": ["Melody", "Aria"],
+    }
+
+    def test_story_characters_restored(self) -> None:
+        blacklist = set(self.world.options.character_blacklist.value)
+        self.assertNotIn("Melody", blacklist)
+        self.assertNotIn("Aria", blacklist)
+
+    def test_story_events_still_present(self) -> None:
+        names = self._location_names()
+        self.assertIn("Melody - Beat NecroDancer", names)
+        self.assertIn("Aria - Beat Golden Lute", names)
+
+
+class TestStoryGoalNeedsZoneAccess(_StoryGoalBase):
+    """Aria's fight is in Zone 1, Cadence's and Melody's in Zone 4."""
+
+    options = {
+        "goal": "Story",
+        "dlc": [],
+        "zone_access_keys": "progressive",
+        "starting_zone": "zone_1",
+        "starting_inventory": 0,
+        "character_blacklist": [],
+    }
+
+    def test_zone4_boss_blocked_without_access(self) -> None:
+        state = CollectionState(self.multiworld)
+        state.add_item("Cadence", self.player, 1)
+        self.assertFalse(self._can_reach(state, "Cadence - Beat Dead Ringer"))
+
+    def test_zone4_boss_reachable_with_access(self) -> None:
+        state = CollectionState(self.multiworld)
+        state.add_item("Cadence", self.player, 1)
+        state.add_item("Progressive Zone Access", self.player, 3)
+        self.assertTrue(self._can_reach(state, "Cadence - Beat Dead Ringer"))

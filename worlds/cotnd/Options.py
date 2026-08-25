@@ -12,7 +12,7 @@ from Options import (
     OptionSet,
     NamedRange,
 )
-from worlds.cotnd.Characters import all_chars
+from worlds.cotnd.Items import CHARACTER_NAMES
 
 all_game_modes = [
     "No Return",
@@ -42,17 +42,20 @@ class DeathLinkType(Choice):
 
 # Goal Options
 class Goal(Choice):
-    """What goal to set for the Crypt of the NecroDancer multiworld. Default is Zones.
-    All_Zones: Clear All Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear". Recommended for experienced players, as this can be challenging.
-    Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks. Recommended for a quicker and less challenging experience.
-    Golden_Lute_Shards: Collect X Golden Lute Shard items, where X is the value put for "Golden Lute Shards Goal Clear". Will disable "All Zones" checks. The shards are shuffled into the multiworld.
+    """What goal to set for the Crypt of the NecroDancer multiworld. Default is Story.
+    All_Zones: Clear All Zones mode with X amount of characters, where X is the value put for "All Zones Goal Clear".
+    Zones: Clear X amount of zones, where X is the value put for "Zones Goal Clear". Will disable "All Zones" checks.
+    Golden_Lute_Shards: Collect X Golden Lute Shard items, where X is the value put for "Golden Lute Shards Goal Clear". The shards are shuffled into the multiworld.
+    Story: Beat the game's story bosses: Dead Ringer, NecroDancer I, NecroDancer II, Golden Lute (Frankensteinway, The Conductor with Amplified enabled).
+           Requires those characters and access to the zones their bosses live in.
     """
 
     display_name = "Goal"
     option_All_Zones = 0
     option_Zones = 1
     option_Golden_Lute_Shards = 2
-    default = option_Zones
+    option_Story = 3
+    default = option_Story
 
 
 class AllZonesGoalClear(Range):
@@ -67,7 +70,7 @@ class AllZonesGoalClear(Range):
 
 
 class ZonesGoalClear(Range):
-    """Determines how many separate zone completions are required for the Zones goal. Default is 30.
+    """Determines how many separate zone completions are required for the Zones goal. Default is 24.
     Note: If this value exceeds the number of zones in the pool, then this value will equal that number.
     """
 
@@ -82,8 +85,18 @@ class GoldenLuteShardsGoalClear(Range):
 
     display_name = "Amount required for Golden Lute Shards Goal"
     range_start = 1
-    range_end = 50
+    range_end = 100
     default = 10
+
+
+class LuteShardsInPool(Range):
+    """Determines how many Golden Lute Shards are shuffled into the multiworld for the Golden Lute Shards goal.
+    Raised to match the goal amount if set lower than the required amount. Default is 13."""
+
+    display_name = "Golden Lute Shards in Pool"
+    range_start = 1
+    range_end = 100
+    default = 13
 
 
 class VictoryTrigger(Choice):
@@ -111,10 +124,41 @@ class ExpensivePurchasePrice(Range):
     default = 150
 
 
-class FloorClearChecks(DefaultOnToggle):
-    """Determines whether zone clear checks are split per floor (e.g., 1-1, 1-2, 1-3, Boss) instead of just a single 'Zone X' check. Default is true."""
+class ZoneProgressChecks(Range):
+    """How many checks each character earns per zone, counting the zone clear itself. Default is 2.
+    Checks are spaced evenly through the zone, and clearing the zone is always one of them:
+    1: The zone clear only.
+    2: Floor 2 and the zone clear.
+    3: Floors 1, 3, and the zone clear.
+    4: Each floor and the zone clear.
+    Note: Story boss checks (Dead Ringer, NecroDancer (I, II), Golden Lute, Frankensteinway, and The Conductor) are separate and exist at every setting.
+    """
 
-    display_name = "Floor Clear Checks"
+    display_name = "Zone Progress Checks"
+    range_start = 1
+    range_end = 4
+    default = 2
+
+
+# Difficulty Options
+_default_speedrun_times = {char: 0 for char in CHARACTER_NAMES}
+
+
+class AllZonesSpeedrunTimes(OptionCounter):
+    """Time limits in minutes for each character's All Zones check. 0 leaves a character untimed. Default is 0 for everyone.
+    A character's "<name> - All Zones" location is only sent if their AP Zones Mode run finishes within their limit.
+    Warning: This does not change logic. Generation still treats the location as reachable, the mod just will not send the location
+    unless you reach the set speedrun time.
+    Note: Values of 1 or 2 are raised to 3 during generation. A 3 minute run is pretty much a longshot but not practically unbeatable.
+    """
+
+    display_name = "All Zones Speedrun Times"
+    valid_keys = frozenset(CHARACTER_NAMES)
+
+    min = 0
+    max = 60
+
+    default = _default_speedrun_times
 
 
 # Content Options
@@ -155,6 +199,59 @@ class IncludeShrineChecks(Toggle):
     display_name = "Include Shrine Checks"
 
 
+class ItemsPerZone(Range):
+    """How many item checks a zone offers. Items can be acquired throughout a zone in a variety of ways, including chests, crates, barrels, and shops.
+    The higher the number, the more time spent grinding for various items in a run. Default is 8 per zone (32/40 additional locations).
+    Set this to 0 to turn item checks off entirely.
+    Note: This is a minimum. If your item pool ever exceeds your locations, rows are added automatically to fit, alternating with shop rows.
+    """
+
+    display_name = "Item Checks Per Zone"
+    range_start = 0
+    range_end = 25
+    default = 8
+
+
+class ItemGenerationChance(Range):
+    """Percent chance that a generated item carries its zone's item check rather than what it was going to generate as. Once all
+    item checks in a zone have been acquired, item generation will return to normal for that zone. Default is 25.
+    """
+
+    display_name = "Item Generation Chance"
+    range_start = 1
+    range_end = 100
+    default = 25
+
+
+class IncludeFlawlessChestChecks(Toggle):
+    """Determines whether the chests awarded for a flawless boss kill are checks, for 1 check per zone. Default is false.
+    Note: Three chests spawn on a flawless kill but opening one despawns the others, so only one check is available per zone.
+    """
+
+    display_name = "Include Flawless Chest Checks"
+
+
+class ShopRows(NamedRange):
+    """How many rows of AP shop items to include. Each row is 9 locations (3 shopkeepers x 3 slots), and row N requires N-1 Shop Restock items. Default is auto.
+    Auto keeps the historical count, which scales with your enabled DLCs (69 base, 73 with Synchrony, 98 with Amplified, 102 with both).
+    Lowering this trims filler from the multiworld, but note that AP shop slots are priced in AP diamonds and are the main thing diamonds are spent on, so a smaller shop means a thinner economy.
+    Note: This is a minimum. If your item pool ever exceeds your locations, rows are added automatically to fit, alternating with zone item rows.
+    Set this to 0 to keep the shop out of that growth, leaving item checks to absorb it alone. If item checks are off or also 0, the shop grows anyway.
+    """
+
+    display_name = "Shop Rows"
+    range_start = 0
+    range_end = 25
+    default = 4
+    special_range_names = {
+        "auto": -1,
+        "minimal": 1,
+        "small": 4,
+        "medium": 8,
+        "large": 12,
+    }
+
+
 class LobbyNPCItems(Toggle):
     """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead of unlocking their room."""
 
@@ -179,7 +276,7 @@ class StartingInventory(NamedRange):
     Vanilla (100): All starting items, like a fresh save.
     Half (50): Half of all starting items.
     Reduced (25): A quarter of all starting items.
-    Minimum (0): Only mandatory items (Dagger, Apple, Shovel)."""
+    Minimum (0): Only mandatory items (Dagger, Shovel)."""
 
     range_start = 0
     range_end = 100
@@ -199,7 +296,7 @@ class ZoneAccessKeys(Choice):
     option_disabled = 0
     option_separate = 1
     option_progressive = 2
-    default = option_disabled
+    default = option_progressive
 
 
 class StartingZone(Choice):
@@ -259,7 +356,7 @@ class CharacterBlacklist(OptionSet):
     """
 
     display_name = "Character Blacklist"
-    valid_keys = frozenset(all_chars)
+    valid_keys = frozenset(CHARACTER_NAMES)
     default = ["Coda", "Bolt"]
 
 
@@ -293,6 +390,16 @@ class LockCharacterRoom(Toggle):
     display_name = "Lock Character Room"
 
 
+class PermanentHealthUpgrades(Range):
+    """The number of permanent health upgrades to include in the multiworld. Setting this higher will make for an easier time in
+    later runs, while making it lower will keep things challenging. Default is 3."""
+
+    display_name = "Number of Permanent Health Upgrades"
+    range_start = 0
+    range_end = 8
+    default = 3
+
+
 class BuffItems(Toggle):
     """When enabled, buff shrines can only be activated after receiving both the character item and their corresponding buff item.
     Otherwise, only the character is required to toggle a character's buff.
@@ -316,7 +423,7 @@ class TrapPercentage(Range):
 
 _default_trap_weights = {
     "Animal Trap": 40,
-    "Bald Trap": 90,
+    "Bald Trap": 50,
     "Bomb Trap": 20,
     "Camera Trap": 70,
     "Chaos Trap": 40,
@@ -329,6 +436,8 @@ _default_trap_weights = {
     "Disarm Trap": 40,
     "Double Damage Trap": 20,
     "Earth Trap": 70,
+    "Frank Trap": 10,
+    "Freddy Trap": 60,
     "Freeze Trap": 50,
     "Gold Scatter Trap": 80,
     "Haunted Shopkeeper Trap": 70,
@@ -343,14 +452,16 @@ _default_trap_weights = {
     "Shake Trap": 70,
     "Shrink Trap": 30,
     "Spotlight Trap": 40,
-    "Summon Trap": 70,
+    "Summon Trap": 80,
     "Swap Trap": 40,
     "Tar Trap": 50,
     "Teleport Trap": 40,
     "Tempo Trap": 70,
     "Timer Trap": 30,
     "Transmute Trap": 40,
+    "Trap Trap": 40,
     "Undo Trap": 40,
+    "Wall Pig Trap": 30,
 }
 
 
@@ -452,7 +563,7 @@ class DiamondExchangeRate(NamedRange):
     range_start = 0
     range_end = 1000
     special_range_names = {"disabled": 0, "shrine_rate": 50, "default": 100, "stingy": 150}
-    default = 50
+    default = 100
 
 
 # Multiplayer Options
@@ -476,9 +587,11 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     all_zones_goal_clear: AllZonesGoalClear
     zones_goal_clear: ZonesGoalClear
     golden_lute_shards_goal_clear: GoldenLuteShardsGoalClear
+    lute_shards_in_pool: LuteShardsInPool
     victory_trigger: VictoryTrigger
     expensive_purchase_price: ExpensivePurchasePrice
-    floor_clear_checks: FloorClearChecks
+    zone_progress_checks: ZoneProgressChecks
+    all_zones_speedrun_times: AllZonesSpeedrunTimes
     dlc: DLC
     death_link_type: DeathLinkType
     death_link_trigger: DeathLinkTrigger
@@ -491,6 +604,10 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     included_extra_modes: IncludedExtraModes
     include_codex_checks: IncludeCodexChecks
     include_shrine_checks: IncludeShrineChecks
+    items_per_zone: ItemsPerZone
+    item_generation_chance: ItemGenerationChance
+    include_flawless_chest_checks: IncludeFlawlessChestChecks
+    shop_rows: ShopRows
     lobby_npc_items: LobbyNPCItems
     zone_access_keys: ZoneAccessKeys
     starting_zone: StartingZone
@@ -503,6 +620,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     price_randomization: PriceRandomization
     price_ranges: PriceRanges
     diamond_exchange_rate: DiamondExchangeRate
+    permanent_health_upgrades: PermanentHealthUpgrades
 
 
 option_groups = [
@@ -513,9 +631,17 @@ option_groups = [
             AllZonesGoalClear,
             ZonesGoalClear,
             GoldenLuteShardsGoalClear,
+            LuteShardsInPool,
             VictoryTrigger,
             ExpensivePurchasePrice,
-            FloorClearChecks,
+            ZoneProgressChecks,
+        ],
+    ),
+    OptionGroup(
+        "Difficulty Options",
+        [
+            AllZonesSpeedrunTimes,
+            PermanentHealthUpgrades
         ],
     ),
     OptionGroup(
@@ -525,6 +651,10 @@ option_groups = [
             IncludedExtraModes,
             IncludeCodexChecks,
             IncludeShrineChecks,
+            ItemsPerZone,
+            ItemGenerationChance,
+            IncludeFlawlessChestChecks,
+            ShopRows,
             LobbyNPCItems,
             IncludeMaterials,
         ],

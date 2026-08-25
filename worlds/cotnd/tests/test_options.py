@@ -59,42 +59,68 @@ class TestGoalZonesLocations(CotNDTestBase):
 # Floor clear checks on/off
 # ---------------------------------------------------------------------------
 
-class TestFloorClearChecksEnabled(CotNDTestBase):
-    """With floor_clear_checks=True, per-floor locations should be present."""
+class _ZoneProgressBase(CotNDTestBase):
+    """Zone Progress Checks: the zone clear is always a check, floors are spaced."""
 
-    options = {
-        "floor_clear_checks": "true",
-        "character_blacklist": [],
-        "dlc": [],
-    }
-
-    def test_floor_locations_present(self) -> None:
+    def floors_present(self) -> set[int]:
         names = _location_names(self.multiworld, self.player)
-        self.assertIn("Cadence - Zone 1 - Floor 1", names)
-        self.assertIn("Cadence - Zone 1 - Boss", names)
+        return {n for n in (1, 2, 3) if f"Cadence - Zone 1 - Floor {n}" in names}
 
-    def test_zone_clear_location_absent(self) -> None:
+    def assert_zone_clear_present(self) -> None:
+        self.assertIn("Cadence - Zone 1", _location_names(self.multiworld, self.player))
+
+    def assert_no_boss_locations(self) -> None:
         names = _location_names(self.multiworld, self.player)
-        self.assertNotIn("Cadence - Zone 1", names)
+        self.assertEqual([n for n in names if n.endswith(" - Boss")], [])
 
 
-class TestFloorClearChecksDisabled(CotNDTestBase):
-    """With floor_clear_checks=False, only the Zone clear location is present (no per-floor)."""
+class TestZoneProgressChecksOne(_ZoneProgressBase):
+    options = {"zone_progress_checks": 1, "character_blacklist": [], "dlc": []}
 
-    options = {
-        "floor_clear_checks": "false",
-        "character_blacklist": [],
-        "dlc": [],
-    }
+    def test_only_zone_clear(self) -> None:
+        self.assert_zone_clear_present()
+        self.assertEqual(self.floors_present(), set())
+        self.assert_no_boss_locations()
 
-    def test_zone_clear_location_present(self) -> None:
+    def test_story_bosses_survive(self) -> None:
+        """Story bosses are independent of this option."""
         names = _location_names(self.multiworld, self.player)
-        self.assertIn("Cadence - Zone 1", names)
+        self.assertIn("Cadence - Dead Ringer", names)
+        self.assertIn("Aria - Golden Lute", names)
 
-    def test_floor_locations_absent(self) -> None:
+
+class TestZoneProgressChecksTwo(_ZoneProgressBase):
+    options = {"zone_progress_checks": 2, "character_blacklist": [], "dlc": []}
+
+    def test_middle_floor_only(self) -> None:
+        self.assert_zone_clear_present()
+        self.assertEqual(self.floors_present(), {2})
+
+
+class TestZoneProgressChecksThree(_ZoneProgressBase):
+    options = {"zone_progress_checks": 3, "character_blacklist": [], "dlc": []}
+
+    def test_outer_floors(self) -> None:
+        """Spacing, not back-loading: floors 1 and 3, deliberately skipping 2."""
+        self.assert_zone_clear_present()
+        self.assertEqual(self.floors_present(), {1, 3})
+
+
+class TestZoneProgressChecksFour(_ZoneProgressBase):
+    options = {"zone_progress_checks": 4, "character_blacklist": [], "dlc": []}
+
+    def test_every_floor(self) -> None:
+        self.assert_zone_clear_present()
+        self.assertEqual(self.floors_present(), {1, 2, 3})
+        self.assert_no_boss_locations()
+
+    def test_dove_matches_other_characters(self) -> None:
+        """Dove has no boss, but her zone clear is the same location as everyone's."""
         names = _location_names(self.multiworld, self.player)
-        self.assertNotIn("Cadence - Zone 1 - Floor 1", names)
-        self.assertNotIn("Cadence - Zone 1 - Boss", names)
+        dove = [n for n in names if n.startswith("Dove - Zone 1")]
+        cadence = [n for n in names if n.startswith("Cadence - Zone 1")]
+        self.assertEqual(len(dove), len(cadence))
+        self.assertIn("Dove - Zone 1", names)
 
 
 # ---------------------------------------------------------------------------
@@ -194,11 +220,11 @@ class TestExtraModeLocationsEnabled(CotNDTestBase):
 
     def test_no_beat_location_present(self) -> None:
         names = _location_names(self.multiworld, self.player)
-        self.assertIn("Cadence - No Beat", names)
+        self.assertIn("No Beat Mode", names)
 
     def test_double_tempo_location_present(self) -> None:
         names = _location_names(self.multiworld, self.player)
-        self.assertIn("Cadence - Double Tempo", names)
+        self.assertIn("Double Tempo Mode", names)
 
     def test_mode_items_in_pool(self) -> None:
         pool = set(_pool_names(self.multiworld, self.player))
@@ -267,6 +293,9 @@ class TestBlacklistedCharacterAbsent(CotNDTestBase):
     """Blacklisted characters must not appear in the item pool or have locations."""
 
     options = {
+        # Not the Story goal: that one names Melody and Aria outright and
+        # deliberately overrides the blacklist to keep itself reachable.
+        "goal": "Zones",
         "character_blacklist": ["Melody", "Aria"],
         "dlc": [],
     }
@@ -360,3 +389,67 @@ class TestProgressiveStartingZone3KeyCount(CotNDTestBase):
         precollected = [i.name for i in self.multiworld.precollected_items[self.player]]
         key_count = precollected.count("Progressive Zone Access")
         self.assertEqual(key_count, 2, f"Expected 2 precollected Progressive Zone Access, got {key_count}")
+
+
+class TestZoneProgressSlotData(CotNDTestBase):
+    """The mod gets the resolved floor list, so it never reimplements the spacing."""
+
+    options = {"zone_progress_checks": 3, "character_blacklist": [], "dlc": []}
+
+    def test_table_matches_generation(self) -> None:
+        from worlds.cotnd.Locations import ZONE_PROGRESS_FLOORS
+
+        kept = ZONE_PROGRESS_FLOORS[self.world.options.zone_progress_checks.value]
+        names = _location_names(self.multiworld, self.player)
+        for floor in (1, 2, 3):
+            present = f"Cadence - Zone 1 - Floor {floor}" in names
+            self.assertEqual(present, floor in kept, f"floor {floor} mismatch")
+
+
+class TestZoneProgressCountsScale(CotNDTestBase):
+    """FLOOR count is (N-1) per character-zone; ZONE count is one per character-zone."""
+
+    options = {"zone_progress_checks": 3, "character_blacklist": [], "dlc": []}
+
+    def test_counts(self) -> None:
+        locs = list(self.multiworld.get_locations(self.player))
+        zone_count = sum(1 for loc in locs if _loc_type(loc) is LocationType.ZONE)
+        floor_count = sum(1 for loc in locs if _loc_type(loc) is LocationType.FLOOR)
+        self.assertEqual(floor_count, zone_count * 2, "N=3 keeps two floors per zone")
+
+
+def _loc_type(loc):
+    from worlds.cotnd.Locations import location_from_name
+
+    return location_from_name(loc.name).type
+
+
+class TestSpeedrunTimesSlotData(CotNDTestBase):
+    """Only timed characters reach the mod; everyone else is absent, meaning untimed."""
+
+    options = {
+        "all_zones_speedrun_times": {"Cadence": 6, "Bard": 1},
+        "character_blacklist": [],
+        "dlc": [],
+    }
+
+    def test_only_timed_characters_shipped(self) -> None:
+        times = self.world.fill_slot_data()["all_zones_speedrun_times"]
+        self.assertEqual(times.get("Cadence"), 6)
+        self.assertNotIn("Dove", times, "untimed characters should be omitted entirely")
+
+    def test_below_minimum_is_raised_before_shipping(self) -> None:
+        times = self.world.fill_slot_data()["all_zones_speedrun_times"]
+        self.assertEqual(times.get("Bard"), 3)
+
+
+class TestSpeedrunTimesDefaultOff(CotNDTestBase):
+    """The option is off by default, so the mod sees an empty table."""
+
+    options = {"goal": "All_Zones", "character_blacklist": [], "dlc": []}
+
+    def test_slot_data_empty(self) -> None:
+        self.assertEqual(self.world.fill_slot_data()["all_zones_speedrun_times"], {})
+
+    def test_all_zones_location_still_generated(self) -> None:
+        self.assertIn("Cadence - All Zones", _location_names(self.multiworld, self.player))

@@ -1,7 +1,7 @@
 {
 	"game": "Crypt of the NecroDancer",
 	"minimum_ap_version": "0.6.7",
-	"world_version": "0.7.2",
-	"minimum_mod_version": "3.1.0",
+	"world_version": "0.8.0",
+	"minimum_mod_version": "4.0.0",
 	"authors": ["lastingParadox"]
 }
