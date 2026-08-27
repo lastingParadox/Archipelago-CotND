@@ -4,9 +4,9 @@ from collections import defaultdict
 from copy import copy
 import json
 import math
+import pkgutil
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from BaseClasses import Item, ItemClassification
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from . import CotNDWorld
 
 BASE_ITEM_CODE: Final = 247_080
-DATA_PATH: Final = Path(__file__).parent / "data" / "items.json"
+DATA_RESOURCE: Final = "data/items.json"
 
 class CotNDItem(Item):
     game: str = "Crypt of the NecroDancer"
@@ -150,18 +150,22 @@ def parse_item(entry: dict[str, Any]) -> CotNDItemData:
     )
 
 
-def load_items(path: Path = DATA_PATH) -> list[CotNDItemData]:
-    with path.open(encoding="utf-8") as data_file:
-        entries = json.load(data_file)
+def load_items(resource: str = DATA_RESOURCE) -> list[CotNDItemData]:
+    data = pkgutil.get_data(__name__, resource)
+
+    if data is None:
+        raise FileNotFoundError(f"{resource}: missing from the cotnd world package")
+
+    entries = json.loads(data.decode("utf-8"))
 
     if not isinstance(entries, list):
-        raise ValueError(f"{path}: expected a list of items, got {type(entries).__name__}")
+        raise ValueError(f"{resource}: expected a list of items, got {type(entries).__name__}")
 
     return [parse_item(entry) for entry in entries]
 
 
-def load_item_pool(path: Path = DATA_PATH) -> CotNDItemPool:
-    return CotNDItemPool(load_items(path))
+def load_item_pool(resource: str = DATA_RESOURCE) -> CotNDItemPool:
+    return CotNDItemPool(load_items(resource))
 
 # Master item pool for reference in World, Client, etc.
 
@@ -210,12 +214,7 @@ def zone_access_key_items(world: CotNDWorld, dlc: DLC) -> list[CotNDItemData]:
     return [copy(progressive) for _ in range(zones - 1)]
 
 def character_requirement_ids(world: CotNDWorld) -> dict[str, dict[str, list[str]]]:
-    """Each character's gating items as CotND entity ids, split by whether they are unique.
-
-    Sent to the mod so it does not keep a second copy of this table. It still applies its
-    own soft/hard rule on top; what it cannot work out for itself is which of these items
-    this slot's DLC put in the pool at all.
-    """
+    #Each character's gating items as CotND entity ids, split by whether they are unique.
     dlc = owned_dlc(world)
     requirements: dict[str, dict[str, list[str]]] = {}
 

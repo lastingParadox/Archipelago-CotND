@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import math
+import pkgutil
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, auto
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Optional
 
 from BaseClasses import Location
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from . import CotNDWorld
 
 BASE_LOCATION_CODE: Final = 742_080
-DATA_PATH: Final = Path(__file__).parent / "data" / "locations.json"
+DATA_RESOURCE: Final = "data/locations.json"
 
 SHOP_ROW_SIZE: Final = 9
 BASE_SHOP_SLOTS: Final = 69
@@ -133,18 +133,22 @@ def parse_location(entry: dict[str, Any]) -> CotNDLocationData:
     )
 
 
-def load_locations(path: Path = DATA_PATH) -> list[CotNDLocationData]:
-    with path.open(encoding="utf-8") as data_file:
-        entries = json.load(data_file)
+def load_locations(resource: str = DATA_RESOURCE) -> list[CotNDLocationData]:
+    data = pkgutil.get_data(__name__, resource)
+
+    if data is None:
+        raise FileNotFoundError(f"{resource}: missing from the cotnd world package")
+
+    entries = json.loads(data.decode("utf-8"))
 
     if not isinstance(entries, list):
-        raise ValueError(f"{path}: expected a list of locations, got {type(entries).__name__}")
+        raise ValueError(f"{resource}: expected a list of locations, got {type(entries).__name__}")
 
     return [parse_location(entry) for entry in entries]
 
 
-def load_location_pool(path: Path = DATA_PATH) -> CotNDLocationPool:
-    return CotNDLocationPool(load_locations(path))
+def load_location_pool(resource: str = DATA_RESOURCE) -> CotNDLocationPool:
+    return CotNDLocationPool(load_locations(resource))
 
 # Master location pool for reference in World, Client, etc.
 
