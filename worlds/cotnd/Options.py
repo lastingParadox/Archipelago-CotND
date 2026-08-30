@@ -100,12 +100,11 @@ class LuteShardsInPool(Range):
 
 
 class VictoryTrigger(Choice):
-    """Determines what must be completed to trigger victory. All zones must be unlocked to access either mode.
+    """Determines what must be completed to trigger victory. All zones must be unlocked to access either mode. Default is Ensemble.
     Disabled: Victory is sent automatically as soon as the goal is met, with no additional catalyst step.
     Ensemble: Complete an Ensemble Mode Run with your unlocked characters.
     Boss_Rush: Defeat all zone bosses in sequence (4, or 5 with Amplified enabled). The first boss room starts with a Red, Black, and Purple chest.
-    Expensive_Purchase: Buy an expensive item in the AP lobby for a configurable diamond cost, once the goal has been met.
-    Default is Ensemble."""
+    Expensive_Purchase: Buy an expensive item in the AP lobby for a configurable diamond cost, once the goal has been met."""
 
     display_name = "Victory Trigger"
     option_Disabled = 0
@@ -141,21 +140,23 @@ class ZoneProgressChecks(Range):
 
 
 # Difficulty Options
-_default_speedrun_times = {char: 0 for char in CHARACTER_NAMES}
+# Nonzero because of an OptionsCreator Bug: (https://github.com/ArchipelagoMW/Archipelago/pull/6221)
+_default_speedrun_times = {char: -1 for char in CHARACTER_NAMES}
 
 
 class AllZonesSpeedrunTimes(OptionCounter):
-    """Time limits in minutes for each character's All Zones check. 0 leaves a character untimed. Default is 0 for everyone.
-    A character's "<name> - All Zones" location is only sent if their AP Zones Mode run finishes within their limit.
-    Warning: This does not change logic. Generation still treats the location as reachable, the mod just will not send the location
-    unless you reach the set speedrun time.
-    Note: Values of 1 or 2 are raised to 3 during generation. A 3 minute run is pretty much a longshot but not practically unbeatable.
+    """Time limits in minutes for each character's All Zones check. -1 leaves a character untimed. Default is -1 for everyone.
+
+    WARNING: This does not change logic. Generation still treats the location as reachable, the mod just will not send the location
+    unless you reach the set speedrun time. It's suggested not to set these values too low, otherwise you'll get stuck.
+    Note: A value of 0 is treated as -1 during generation, leaving the character untimed.
+    Note: Values of 1 or 2 are raised to 3 during generation. A 3 minute run is pretty much unbeatable for any character that's not Bard or Dove.
     """
 
     display_name = "All Zones Speedrun Times"
     valid_keys = frozenset(CHARACTER_NAMES)
 
-    min = 0
+    min = -1
     max = 60
 
     default = _default_speedrun_times
@@ -163,7 +164,7 @@ class AllZonesSpeedrunTimes(OptionCounter):
 
 # Content Options
 class DLC(OptionSet):
-    """Which DLCs to include content from in progression and checks.
+    """Which DLCs to include content from in progression and checks. Default is [Synchrony].
     Options include: Amplified, Synchrony, Miku, Shovel Knight
     Note: Excluding the Synchrony DLC does not mean that you can play this APWorld without the Synchrony DLC. This is only to exclude content from the Synchrony DLC in the multiworld.
     Note: Excluding the Amplified DLC will remove Zone 5 from progression altogether."""
@@ -174,7 +175,7 @@ class DLC(OptionSet):
 
 
 class IncludedExtraModes(OptionList):
-    """Which game modes to include in checks. Note that this will disable the mode from the run entirely if excluded.
+    """Which game modes to include in checks. Note that this will disable the mode from the run entirely if excluded. Default is [].
     Options include: No Return (Amplified), Hard (Amplified), Phasing (Amplified), Randomizer (Amplified), Mystery (Amplified), No Beat, Double Tempo, and Low Percent.
     Note: If you do not have the Amplified DLC enabled, the modes that require it will be disabled.
     """
@@ -202,7 +203,7 @@ class IncludeShrineChecks(Toggle):
 class ItemsPerZone(Range):
     """How many item checks a zone offers. Items can be acquired throughout a zone in a variety of ways, including chests, crates, barrels, and shops.
     The higher the number, the more time spent grinding for various items in a run. Default is 8 per zone (32/40 additional locations).
-    Set this to 0 to turn item checks off entirely.
+    Set this to 0 to turn item checks off entirely. Default is 8.
     Note: This is a minimum. If your item pool ever exceeds your locations, rows are added automatically to fit, alternating with shop rows.
     """
 
@@ -234,9 +235,9 @@ class IncludeFlawlessChestChecks(Toggle):
 class ShopRows(NamedRange):
     """How many rows of AP shop items to include. Each row is 9 locations (3 shopkeepers x 3 slots), and row N requires N-1 Shop Restock items. Default is auto.
     Auto keeps the historical count, which scales with your enabled DLCs (69 base, 73 with Synchrony, 98 with Amplified, 102 with both).
-    Lowering this trims filler from the multiworld, but note that AP shop slots are priced in AP diamonds and are the main thing diamonds are spent on, so a smaller shop means a thinner economy.
+    Lowering this trims filler from the multiworld, but note that AP shop slots are priced in AP diamonds, so a smaller shop means a thinner economy.
     Note: This is a minimum. If your item pool ever exceeds your locations, rows are added automatically to fit, alternating with zone item rows.
-    Set this to 0 to keep the shop out of that growth, leaving item checks to absorb it alone. If item checks are off or also 0, the shop grows anyway.
+    If this value is set to 0, then the zone item rows will be chosen to grow. If zone item rows are also set to 0 or just aren't enough, then shop rows will grow regardless.
     """
 
     display_name = "Shop Rows"
@@ -253,7 +254,7 @@ class ShopRows(NamedRange):
 
 
 class LobbyNPCItems(Toggle):
-    """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead of unlocking their room."""
+    """Determines whether lobby NPC unlocks will be randomized. Saving the lobby NPC will return a randomized item instead of unlocking their room. Default is false."""
 
     display_name = "Lobby NPC Items"
 
@@ -269,15 +270,14 @@ class IncludeMaterials(Toggle):
 # Starting Inventory
 class StartingInventory(NamedRange):
     """Percentage of starting items granted at world start.
-    If Character Unlocks is not Item_Only, required items for the starting character are always included.
-    Default is 25.
+    If Character Unlocks is not Item_Only, required items for the starting character are always included. Default is 25.
 
-    Presets:
     Vanilla (100): All starting items, like a fresh save.
     Half (50): Half of all starting items.
     Reduced (25): A quarter of all starting items.
     Minimum (0): Only mandatory items (Dagger, Shovel)."""
 
+    display_name = "Starting Inventory"
     range_start = 0
     range_end = 100
     special_range_names = {"vanilla": 100, "half": 50, "reduced": 25, "minimum": 0}
@@ -286,11 +286,11 @@ class StartingInventory(NamedRange):
 
 # Zone Access
 class ZoneAccessKeys(Choice):
-    """Controls whether zones are locked behind Zone Access Key items.
+    """Controls whether zones are locked behind Zone Access Key items. Default is Progressive.
+
     Disabled: Zones have no access requirements.
     Separate: Each zone has its own distinct access key shuffled into the pool. The Starting Zone is freely accessible from the start; all other zones require their unique key.
-    Progressive: A single Progressive Zone Access item is used. Each copy found unlocks the next zone in sequence (Zone 1 requires 0, Zone 2 requires 1, etc.).
-    Default is Disabled."""
+    Progressive: A single Progressive Zone Access item is used. Each copy found unlocks the next zone in sequence (Zone 1 requires 0, Zone 2 requires 1, etc.)."""
 
     display_name = "Zone Access Keys"
     option_disabled = 0
@@ -300,11 +300,11 @@ class ZoneAccessKeys(Choice):
 
 
 class StartingZone(Choice):
-    """When Zone Access Keys are Separate or Progressive, sets the starting accessible zone.
+    """When Zone Access Keys are Separate or Progressive, sets the starting accessible zone. Has no effect when Zone Access Keys is Disabled. Default is Zone 1.
+
     Separate: The starting zone requires no key; all other zones need their unique key.
     Progressive: Starting Zone minus one Progressive Zone Access items are precollected, granting immediate access to all zones up to and including the starting zone.
-    Zone 5 is only valid with Amplified enabled, otherwise pre-generation validation forces Zone 4.
-    Has no effect when Zone Access Keys is Disabled. Default is Zone 1."""
+    Zone 5 is only valid with Amplified enabled, otherwise pre-generation validation forces Zone 4."""
 
     display_name = "Starting Zone"
     option_zone_1 = 1
@@ -362,9 +362,10 @@ class CharacterBlacklist(OptionSet):
 
 class CharacterUnlocks(Choice):
     """How characters should be unlocked in the multiworld. All options will require a character item at the very minimum. Default is Item_Only.
-    Item_Only: Only the character item is required to unlock a character.
-    Required_Items_Soft: The character item (and unique items if enabled) unlocks in-game access to a character. Logic still requires the character's required items.
-    Required_Items_Hard: The character item and all required items (and unique item if Include Unique Equipment is enabled) must be received before in-game access to a character is granted.
+
+    Item Only: Only the character item is required to unlock a character.
+    Required Items Soft: The character item (and unique items if enabled) unlocks in-game access to a character. Logic still requires the character's required items.
+    Required Items Hard: The character item and all required items (and unique item if Include Unique Equipment is enabled) must be received before in-game access to a character is granted.
     """
 
     display_name = "Character Unlocks"
@@ -376,7 +377,7 @@ class CharacterUnlocks(Choice):
 
 class IncludeUniqueEquipment(Toggle):
     """Whether to include character-specific equipment in the multiworld and in level generation. Default is false.
-    If set to true and Character Unlocks is set to either Required_Items_Soft or Required_Items_Hard, the characters who have unique items will require them.
+    If set to true and Character Unlocks is set to either Required_Items_Soft or Required_Items_Hard, the characters who have unique items will require them in order to play as them.
     """
 
     display_name = "Include Unique Equipment"
@@ -410,10 +411,7 @@ class BuffItems(Toggle):
 
 # Trap Options
 class TrapPercentage(Range):
-    """
-    Replaces filler items with traps, at the specified rate.
-    Default is 20.
-    """
+    """Replaces filler items with traps, at the specified rate. Default is 20."""
 
     display_name = "Trap Percentage"
     range_start = 0
@@ -482,16 +480,13 @@ class TrapWeights(OptionCounter):
     default = _default_trap_weights
 
 class TrapLink(Toggle):
-    """
-    When you receive a trap, everyone who enabled trap link also receives a trap. Of course, the reverse is true too.
-    You will not receive traps that you have set to 0 in the trap_weights option. Default is false.
-    """
+    """When you receive a trap, everyone who enabled trap link also receives a trap. Of course, the reverse is true too.
+    You will not receive traps that you have set to 0 in the trap_weights option. Default is false."""
     display_name = "Trap Link"
 
 
 class TrapLinkExcludedTraps(OptionSet):
-    """
-    Traps that can never be triggered by an incoming TrapLink trap, listed by their handler ID.
+    """Traps that can never be triggered by an incoming TrapLink trap, listed by their handler ID.
     Only applies to TrapLink-only traps (traps without a pool item); pool traps are excluded by
     setting their trap_weights entry to 0 instead. For the full list of handler IDs, see:
     https://github.com/lastingParadox/Archipelago-CotND/blob/crypt-of-the-necrodancer/worlds/cotnd/docs/traps.md
@@ -502,12 +497,12 @@ class TrapLinkExcludedTraps(OptionSet):
 
 # Pricing Options
 class PriceRandomization(Choice):
-    """How to randomize diamond prices in the Archipelago lobby.
+    """How to randomize diamond prices in the Archipelago lobby. Default is Vanilla.
+
     Vanilla: CotND item prices remain at their vanilla price values. All AP and non-CotND item prices will be randomized according to their item classification (Filler, Useful, Progression).
-    Vanilla_Rand: CotND item prices remain at their vanilla price values. All AP and non-CotND item prices will be randomized completely.
-    Item_Class: All item prices will be randomized according to their item classification (Filler, Useful, Progression).
+    Vanilla Rand: CotND item prices remain at their vanilla price values. All AP and non-CotND item prices will be randomized completely.
+    Item Class: All item prices will be randomized according to their item classification (Filler, Useful, Progression).
     Complete: All item prices will be randomized completely.
-    Default is Vanilla.
     """
 
     display_name = "Price Randomization"
@@ -531,10 +526,9 @@ _default_price_ranges = {
 
 
 class PriceRanges(OptionCounter):
-    """
-    Diamond price ranges for items in the Archipelago lobby, in diamonds.
-    random_min / random_max apply when Price Randomization is Vanilla_Rand or Complete.
-    The filler, useful and progression pairs apply when it is Vanilla or Item_Class.
+    """Diamond price ranges for items in the Archipelago lobby, in diamonds.
+    random_min / random_max apply when Price Randomization is Vanilla Rand or Complete.
+    The filler, useful and progression pairs apply when it is Vanilla or Item Class.
     A minimum above its matching maximum is swapped during generation.
     """
 
@@ -569,8 +563,10 @@ class DiamondExchangeRate(NamedRange):
 # Multiplayer Options
 class DeathLinkTrigger(Choice):
     """With more than one player in a run, what counts as a death worth sending a DeathLink for. Default is Game Over.
-    Game_Over: A DeathLink is sent only when a death leaves no players standing, ending the run.
-    Each_Death: A DeathLink is sent every time any player dies, even if the run continues.
+
+    Game Over: A DeathLink is sent only when a death leaves no players standing, ending the run.
+    Each Death: A DeathLink is sent every time any player dies, even if the run continues.
+
     Note: This applies to both online multiplayer and local co-op. In singleplayer both settings behave identically, since any death ends the run.
     """
 
@@ -623,7 +619,7 @@ class CotNDOptions(DeathLinkMixin, PerGameCommonOptions):
     permanent_health_upgrades: PermanentHealthUpgrades
 
 
-option_groups = [
+cotnd_option_groups = [
     OptionGroup(
         "Goal Options",
         [
@@ -634,7 +630,6 @@ option_groups = [
             LuteShardsInPool,
             VictoryTrigger,
             ExpensivePurchasePrice,
-            ZoneProgressChecks,
         ],
     ),
     OptionGroup(
@@ -648,6 +643,7 @@ option_groups = [
         "Content Options",
         [
             DLC,
+            ZoneProgressChecks,
             IncludedExtraModes,
             IncludeCodexChecks,
             IncludeShrineChecks,

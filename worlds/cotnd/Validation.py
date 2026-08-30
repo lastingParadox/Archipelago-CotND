@@ -98,7 +98,12 @@ def validate_price_ranges(options: CotNDOptions) -> None:
 
 def validate_speedrun_times(options: CotNDOptions) -> None:
     times = options.all_zones_speedrun_times.value
+    disabled = [char for char, minutes in times.items() if minutes == 0]
     raised = sorted(char for char, minutes in times.items() if 0 < minutes < MIN_SPEEDRUN_MINUTES)
+
+    # Zero is the other way a user spells "untimed", so fold it into the sentinel.
+    for char in disabled:
+        times[char] = -1
 
     if raised:
         warn(f"Raising All Zones speedrun times to {MIN_SPEEDRUN_MINUTES} minutes for "

@@ -313,9 +313,14 @@ class TestSpeedrunTimes(CotNDTestBase):
         self.assertEqual(times["Cadence"], MIN_SPEEDRUN_MINUTES)
         self.assertEqual(times["Bard"], MIN_SPEEDRUN_MINUTES)
 
-    def test_zero_stays_disabled(self) -> None:
-        # Zero means untimed, so it is not a time to raise
-        self.assertEqual(self._validate({"Cadence": 0})["Cadence"], 0)
+    def test_zero_folds_into_disabled(self) -> None:
+        # Zero means untimed, so it becomes the sentinel rather than a time to raise
+        self.assertEqual(self._validate({"Cadence": 0})["Cadence"], -1)
+
+    def test_disabled_stays_disabled(self) -> None:
+        self.assertEqual(
+            self._validate({"Cadence": -1})["Cadence"], -1
+        )
 
     def test_valid_times_untouched(self) -> None:
         times = self._validate({"Cadence": 3, "Reaper": 8})

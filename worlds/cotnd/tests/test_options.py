@@ -428,7 +428,7 @@ class TestSpeedrunTimesSlotData(CotNDTestBase):
     """Only timed characters reach the mod; everyone else is absent, meaning untimed."""
 
     options = {
-        "all_zones_speedrun_times": {"Cadence": 6, "Bard": 1},
+        "all_zones_speedrun_times": {"Cadence": 6, "Bard": 1, "Coda": 0, "Monk": -1},
         "character_blacklist": [],
         "dlc": [],
     }
@@ -437,6 +437,11 @@ class TestSpeedrunTimesSlotData(CotNDTestBase):
         times = self.world.fill_slot_data()["all_zones_speedrun_times"]
         self.assertEqual(times.get("Cadence"), 6)
         self.assertNotIn("Dove", times, "untimed characters should be omitted entirely")
+
+    def test_disabled_characters_omitted(self) -> None:
+        times = self.world.fill_slot_data()["all_zones_speedrun_times"]
+        self.assertNotIn("Coda", times, "zero means untimed, so it should not ship a time")
+        self.assertNotIn("Monk", times, "-1 means untimed, so it should not ship a time")
 
     def test_below_minimum_is_raised_before_shipping(self) -> None:
         times = self.world.fill_slot_data()["all_zones_speedrun_times"]

@@ -10,7 +10,7 @@ from worlds.cotnd.Items import (ALL_ITEMS, ITEM_NAME_GROUPS, ITEM_NAME_TO_ID, Co
                                 get_random_filler_item_name)
 from worlds.cotnd.Locations import (LOCATION_NAME_GROUPS, LOCATION_NAME_TO_ID, ZONE_PROGRESS_FLOORS,
                                     create_all_locations, story_boss_keys)
-from worlds.cotnd.Options import CotNDOptions
+from worlds.cotnd.Options import CotNDOptions, cotnd_option_groups
 from worlds.cotnd.Regions import LOBBY_REGION, create_and_connect_regions
 from worlds.cotnd.Rules import set_all_rules
 from worlds.cotnd.Utils import assign_caged_npcs, owned_dlc
@@ -38,8 +38,9 @@ class CotNDWeb(WebWorld):
     )
 
     tutorials = [guide_en]
-
     bug_report_page = "https://github.com/lastingParadox/Archipelago-CotND/issues"
+
+    option_groups = cotnd_option_groups
 
 class CotNDWorld(World):
     """
@@ -158,7 +159,7 @@ class CotNDWorld(World):
         # Resolved here so the mod holds no second copy of who needs what.
         fill["character_requirements"] = character_requirement_ids(self)
 
-        # Zero means "no speedrun target", which the mod reads as absent rather than 0.
+        # -1 means "no speedrun target", which the mod reads as absent rather than a time.
         fill["all_zones_speedrun_times"] = {
             character: minutes
             for character, minutes in options.all_zones_speedrun_times.value.items()
