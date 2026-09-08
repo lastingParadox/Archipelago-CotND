@@ -322,5 +322,6 @@
   {"name": "Wall Pig Trap", "classification": "trap", "type": "trap", "cotnd_id": "WallPigTrap", "dlc": ["base"], "inventory_type": "never"},
   {"name": "Trap Trap", "classification": "trap", "type": "trap", "cotnd_id": "TrapTrap", "dlc": ["base"], "inventory_type": "never"},
   {"name": "Frank Trap", "classification": "trap", "type": "trap", "cotnd_id": "FrankTrap", "dlc": ["amplified"], "inventory_type": "never"},
-  {"name": "Freddy Trap", "classification": "trap", "type": "trap", "cotnd_id": "FreddyTrap", "dlc": ["base"], "inventory_type": "never"}
+  {"name": "Freddy Trap", "classification": "trap", "type": "trap", "cotnd_id": "FreddyTrap", "dlc": ["base"], "inventory_type": "never"},
+  {"name": "Marv Trap", "classification": "trap", "type": "trap", "cotnd_id": "MarvTrap", "dlc": ["amplified"], "inventory_type": "never"}
 ]

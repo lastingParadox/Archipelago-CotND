@@ -444,6 +444,7 @@ _default_trap_weights = {
     "Isometric Trap": 40,
     "Leaping Trap": 40,
     "Market Crash Trap": 30,
+    "Marv Trap": 40,
     "Monkey Trap": 60,
     "No Return Trap": 40,
     "One Hit Trap": 10,
