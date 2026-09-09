@@ -70,14 +70,16 @@ def load_vendored_zstandard() -> None:
     extracted_any = False
 
     with zipfile.ZipFile(bundle_path) as zf:
-        for member in zf.namelist():
-            if member.startswith(source_prefix):
-                relative_path = os.path.relpath(member, source_prefix)
-                target_path = os.path.join(extract_root, "zstandard", relative_path)
-                os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                with zf.open(member) as src_file, open(target_path, "wb") as dst_file:
-                    dst_file.write(src_file.read())
-                extracted_any = True
+        # Directory entries relpath to ".", which open() then rejects.
+        for member in zf.infolist():
+            if member.is_dir() or not member.filename.startswith(source_prefix):
+                continue
+            relative_path = os.path.relpath(member.filename, source_prefix)
+            target_path = os.path.join(extract_root, "zstandard", relative_path)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with zf.open(member) as src_file, open(target_path, "wb") as dst_file:
+                dst_file.write(src_file.read())
+            extracted_any = True
 
     if not extracted_any:
         raise RuntimeError(
