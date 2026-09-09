@@ -47,8 +47,12 @@ def _decode_luajit_string(buf: bytes) -> bytes:
         return buf[5:]
 
 
-def get_data_folder_path():
-    """Grabs the Archipelago data folder path for Crypt of the NecroDancer. Creates the directory if it does not exist."""
+def get_data_folder_path() -> str | None:
+    """Grabs the Archipelago data folder path for Crypt of the NecroDancer. Creates the directory if it does not exist.
+
+    Returns None when the game's data folder cannot be found, so a client on a machine
+    without NecroDancer starts and explains itself instead of dying before its window exists.
+    """
     if system == "Windows":
         data_path = os.path.expandvars("%LOCALAPPDATA%\\NecroDancer")
     elif system == "Darwin":
@@ -65,20 +69,21 @@ def get_data_folder_path():
             data_path = default_path
     else:
         logger.error(f"Unrecognized operating system {system}, please report.")
-        raise RuntimeError(f"Unsupported operating system: {system}")
+        return None
 
-    """in.json sends data into the game. out.json gets data out from the game."""
     if not os.path.exists(data_path):
-        message = (
+        logger.error(
             f"No local data found for NecroDancer at {data_path}. "
-            "Please install and run Crypt of the NecroDancer before attempting to run this client."
+            "Please install and run Crypt of the NecroDancer, then reconnect this client."
         )
-        logger.error(message)
-        raise FileNotFoundError(message)
+        return None
 
     ap_path = os.path.join(data_path, "archipelago")
-    if not os.path.isdir(ap_path):
-        os.mkdir(ap_path)
+    try:
+        os.makedirs(ap_path, exist_ok=True)
+    except OSError as exc:
+        logger.error(f"Could not create the Archipelago folder at {ap_path}: {exc}")
+        return None
 
     return ap_path
 
@@ -125,10 +130,12 @@ class CotNDServer:
         )
         self._zstd_cctx = zstandard.ZstdCompressor(level=3)
 
-        _port_file = self.data_path + "/port.txt"
+        # Reads data_path at exit, so a folder resolved late by start() is still cleared.
         def _clear_port_file():
+            if not self.data_path:
+                return
             try:
-                open(_port_file, "w").close()
+                open(os.path.join(self.data_path, "port.txt"), "w").close()
             except Exception:
                 pass
         atexit.register(_clear_port_file)
@@ -367,6 +374,16 @@ class CotNDServer:
         if self._server is not None:
             return  # Server's been started
 
+        # Re-resolved here because the client is often opened before the game's first run.
+        if self.data_path is None:
+            self.data_path = get_data_folder_path()
+        if self.data_path is None:
+            logger.error(
+                "Crypt of the NecroDancer is not connected: its data folder was not found. "
+                "Install and run the game once, then reconnect this client."
+            )
+            return
+
         self.server_print("Starting server...")
 
         self._server = await asyncio.start_server(
@@ -376,7 +393,7 @@ class CotNDServer:
         self.port = sock.getsockname()[1]
         self.server_print(f"Listening on {self.host}:{self.port}")
 
-        with open(self.data_path + "/port.txt", "w") as f:
+        with open(os.path.join(self.data_path, "port.txt"), "w") as f:
             f.write(str(self.port))
 
         asyncio.create_task(self._server.serve_forever(), name="CotNDServer")
@@ -385,8 +402,9 @@ class CotNDServer:
         if not self._server:
             return
 
-        with open(self.data_path + "/port.txt", "w") as _:
-            pass
+        if self.data_path:
+            with open(os.path.join(self.data_path, "port.txt"), "w") as _:
+                pass
 
         self.server_print("Shutting down")
         self._server.close()
